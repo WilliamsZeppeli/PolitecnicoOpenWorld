@@ -67,7 +67,7 @@ fun PrankedyHireDialog(
     LaunchedEffect(Unit) {
         prankedyBitmap = withContext(Dispatchers.IO) {
             try {
-                context.assets.open("assetsNPC/Prankedy/p_idle/p_idle_1.webp").use { s ->
+                context.assets.open("SPRITES/NPC/Prankedy/p_idle/p_idle_1.webp").use { s ->
                     BitmapFactory.decodeStream(s)?.asImageBitmap()
                 }
             } catch (e: Exception) { null }
@@ -169,12 +169,7 @@ fun PrankedyHireDialog(
 
                 // ── Descripción ───────────────────────────────────────────────
                 Text(
-                    text = androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_prankedy_desc_part1) +
-                           "Experto en travesuras y en lanzar objetos a distancia. " +
-                           "Con él de tu lado, los enemigos tienen poco que hacer.\n\n" +
-                           "⚔️ Ataca NPCs hostiles automáticamente\n" +
-                           "🏃 Te sigue a donde vayas\n" +
-                           "🎭 Siempre tiene algo que decir",
+                    text = androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_prankedy_desc_full),
                     color = Color(0xFFBBBBBB),
                     fontSize = if (isLandscape) 13.sp else 15.sp,
                     lineHeight = if (isLandscape) 18.sp else 22.sp,

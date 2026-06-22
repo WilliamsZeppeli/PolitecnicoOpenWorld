@@ -7,6 +7,169 @@ low-end performance) or doc drift.
 
 ---
 
+## 0. Archivos GRANDES (>1000 líneas) — plan de separación
+
+> ### ✅ ESTADO ACTUAL (2026-06-21) — esto MANDA sobre el historial de abajo
+>
+> **Solo 5 archivos pasan de 1000 líneas; solo 1 pasa de 1500:**
+>
+> | Archivo | Líneas | ¿Separar? |
+> |---|---:|---|
+> | `WorldMapViewModel.kt` | **2114** | Único >1500. Lo que queda grande dentro (`startGameLoop` ~490, `handleInteraction`, `trySpawningCollectible`/`checkCollectibleProximity`, `moveCharacter*`) puede extraerse a parciales NUEVOS sin gemelo, pero NO urge. |
+> | `NativeOsmMap.kt` | 1460 | No (renderer Canvas cohesivo). |
+> | `WorldMapScreen.kt` | 1326 | No (raíz Compose ya partida en Overlays/Controls/Google/Web). |
+> | `MainActivity.kt` | 1064 | Opcional (NavHost). Subió un poco por la i18n verbosa. |
+> | `ZombieGameScreen.kt` | 1035 | No. Subió por la i18n. |
+>
+> **✅ DE-DUP DE GEMELOS miembro-vs-extensión: COMPLETA (2026-06-21).** Los 8 pares quedaron resueltos
+> (detalle en `§12 (registro de de-dup, consolidado aquí)`): **de-dup limpio** = `startHealthBarTimer`, `applyRoadNetwork`,
+> `spawnOustedDriver`, `triggerWastedSequence`, `addRemoteEntity`, `maybeRefetchRoadNetwork`,
+> `updateVisibleRoads`. **Fusionados** (se activó lógica buena que estaba muerta) = `handleMultiplayerMessage`
+> (3 bugfixes: isRemote sync, daño en hilo Main, miedo al combate) y `startGameLoop` (audio del game loop:
+> caminar/correr/coche/zombi). **NO TOCAR** (revertido, cadena de routing interdependiente) =
+> `updateDestinationRoute`+`calculateRouteOnNetwork`. `WorldMapGameLoop.kt` quedó como **tombstone**
+> (startGameLoop volvió a ser solo miembro, con el audio fusionado). Ya NO hay gemelos divergentes vivos.
+>
+> **✅ i18n player-facing COMPLETA** (main_menu, settings, map_exterior, campaign, interiores incl. transit
+> y diseñadores, MainActivity). Pendiente menor: `CampaignObjective.title/description` → `@StringRes`. Ver §i18n.
+>
+> *(El historial cronológico de las pasadas de separación queda abajo como registro; los tamaños y el estado
+> de de-dup de ARRIBA son los vigentes.)*
+
+**🆕 Progreso (2026-06-20):** `WorldMapViewModel.kt` bajó de ~3050 a **~2600** líneas extrayendo 4
+parciales nuevos cohesivos (sin gemelo miembro, solo tocan `internal`/`public`): `WorldMapCombat.kt`
+(combate: `performPlayerAttack`/`runOverNpcs`/`provokeApocalypsePolice`/`applyNpcContactDamage`/
+`startRelentlessAttacker`), `WorldMapCampaign.kt` (`setStorySpawn`), `WorldMapTeleport.kt`
+(`teleportTo`/`teleportToMetroStation`/`loadMetroStations`/`teleportToMetrobusStation`/
+`loadMetrobusStations`/`toggleTeleportMenu`) y `WorldMapShineCTO.kt` (`spawnShineCTOMarker`/ShineCTO/
+fade de puerta ESCOM). Imports explícitos añadidos en `MainActivity.kt` (6) y `WorldMapScreen.kt` (3).
+El combate no tenía call-sites externos (solo el game loop miembro lo llama → resuelve a la extensión).
+
+**🆕 Progreso (2026-06-20, 2ª pasada Compose):** `WorldMapScreen.kt` bajó de ~2470 a **~2354** líneas
+extrayendo los overlays/diálogos superpuestos (pantalla WASTED, vídeo zombi, prompts, diálogo Prankedy,
+popup de coleccionable, fades de puerta ESCOM/metro/metrobús) al composable `WorldMapOverlays` en
+`ui/WorldMapScreenOverlays.kt` (mismo paquete `ui`, ~174 líneas). `WorldMapScreen` solo lo invoca:
+`WorldMapOverlays(uiState, viewModel, onNavigateToInterior)`. Sin gotcha miembro/extensión (son
+composables top-level); las extensiones del VM usadas se importan en el archivo nuevo
+(`onHirePrankedy`/`dismissPrankedyDialog`/`onEscomDoorFadeComplete`). MVVM intacto.
+
+**🆕 Progreso (2026-06-20, 3ª pasada):** dos extracciones más:
+- `WorldMapScreen.kt` bajó de ~2354 a **~2255** líneas extrayendo el bloque de controles (vals de
+  layout escala/padding según orientación + botón "Salir del apocalipsis" + fila inferior de D-pad/
+  joystick/acciones, incl. la pulsación larga de Y/△ → `yButtonHoldJob`) al composable
+  `BoxScope.WorldMapControls` en `ui/WorldMapScreenControls.kt`. Se invoca dentro del `Box` principal:
+  `WorldMapControls(uiState, viewModel, optionsExpanded)`. `yButtonHoldJob` se movió al nuevo archivo.
+  Sin gotcha miembro/extensión (composable top-level); importa la extensión `toggleTeleportMenu`.
+- `ZombieGameViewModel.kt` bajó de ~1370 a **~1120** líneas extrayendo TODO el Modo Diseñador (matriz
+  de colisión + waypoints: ~16 funciones) a `viewmodel/ZombieGameDesigner.kt` como **extensiones** del
+  VM (solo tocan `internal`/`public`: `_state`, `currentRoom()`, `applicationContext`, `viewModelScope`;
+  las consts de rejilla del companion se referencian cualificadas `ZombieGameViewModel.MIN_GRID`…).
+  Se ELIMINARON los miembros (no queda gemelo). `ui/ZombieGameScreen.kt` importa las 15 extensiones
+  usadas — incl. referencias acotadas `viewModel::paintCellAtWorld` (Kotlin permite `::` a extensiones).
+
+**🆕 Progreso (2026-06-20, 4ª pasada):**
+- `NativeOsmMap.kt` ~1615→**1457**: `renderPrankedyOnMap`→`ui/NativeOsmMapPrankedy.kt` y la clase
+  `FogOverlay`→`ui/NativeOsmMapFog.kt` (ambas `internal`, mismo paquete `ui`).
+- `NpcAiManager.kt` ~1619→**1419**: cluster de movimiento/geometría (`moveZombieNpc`, `movePoliceHunter`,
+  `moveAggroNpc`, `carFollowScale`, `pointToLineDist`, `calculateDistance`) →
+  `domain/models/ai/NpcAiManagerMovement.kt` como **extensiones** `internal fun NpcAiManager.X`. Para que
+  las extensiones vieran el estado, se pasaron a `internal` 5 miembros (`serverNpcs`, `personSpeed`,
+  `aggroPlayerLat/Lon`, `moveNpc`); los miembros del companion se cualifican
+  (`NpcAiManager.speedMulForRole`/`CAR_FOLLOW_DISTANCE`/`AGGRO_STOP_DIST`/`AGGRO_SPEED_MULT`). Eran
+  todos `private` → sin call-sites externos; los internos resuelven a la extensión del mismo paquete.
+- 🆕 `domain/models/InteriorEntryCatalog.kt` (registro puerta→ruta) + `handleInteraction` ahora
+  data-driven (añadir edificio enterable = 1 entrada). 🆕 Reorg de **campaña** a `features/campaign/`
+  (StoryMode) + `domain/models/campaign/` (CampaignObjective, MissionCatalog **fachada**, SchoolCatalog,
+  StoryComicCatalog) + `domain/models/campaign/mission1/Mission1.kt`. 🆕 Reorg de **assets** (ver
+  `PROPUESTA_reorg_assets.md`): AUDIO/SPRITES/TRANSIT/CONFIG/INTERIORS/VIDEO + iconos a `SPRITES/ICONS`.
+
+**🆕 Progreso (2026-06-20, 5ª pasada):** `WorldMapViewModel.kt` ~2584→**~2503** extrayendo dos parciales
+nuevos (extensiones, sin gemelo): `WorldMapCameraUi.kt` (zoom automático/manual, pinch `onMapZoomChanged`,
+`centerOnPlayer`/`zoomToPlayer`, pan, y toggles de widgets; campos `autoZoomMode`/`targetZoomLevel`
+pasados a `internal`) y `WorldMapSettings.kt` (densidad/LOD de NPCs + skin). Call-sites externos importan
+las extensiones (MainActivity, WorldMapScreen, NativeOsmMap, MapJsBridge). **Tope práctico de extracción
+fácil alcanzado:** lo que queda grande en el VM (startGameLoop ~440, handleMultiplayerMessage,
+addRemoteEntity, updateVisibleRoads, updateDestinationRoute, triggerWastedSequence) son **pares con
+gemelo en parciales** (miembro canónico) y/o llaman a muchos `private` → su separación = de-duplicar los
+gemelos, que requiere COMPILADOR (ver lista de pares pendientes en §12). No tocar sin Android Studio.
+
+**🆕 Progreso (2026-06-20, 6ª pasada):** `NpcAiManager.kt` ~1419→**~882** extrayendo los dos movers
+de calles GRANDES (`moveNpc` ~382 + `moveLocalNpc` ~159) a `domain/models/ai/NpcAiManagerTraffic.kt`
+como **extensiones** `internal fun NpcAiManager.X`. Para que las extensiones vieran el estado se
+pasaron a `internal` ~15 miembros antes `private` (`cachedNavLandmarks`, `nodeToWays`,
+`exteriorCollisions`, `parkedTimers`/`parkingCooldowns`/`carExitCooldowns`/`landmarkEntranceCooldowns`,
+`carSpeed`, `PARKING_WAKE_MIN_MS`/`PARKING_WAKE_MAX_MS`, los 5 `TRAFFIC_AVOID_*`,
+`isNativeWayOverlappingCustom`); los consts del companion se cualifican (`NpcAiManager.LANE_OFFSET`,
+`NpcAiManager.FEAR_SPEED_MULT`). Se ELIMINARON los miembros (no queda gemelo: gana el miembro). Los
+call-sites son del mismo paquete `ai` (`updateNpcs` miembro + `moveZombieNpc`/`movePoliceHunter`
+extensiones en `NpcAiManagerMovement.kt`) → resuelven a la extensión sin imports nuevos. El archivo
+nuevo quedó en LF (normalizar fin de línea en Android Studio o dejar LF, compila igual).
+
+**🆕 Progreso (2026-06-21, 7ª pasada Compose):** `WorldMapScreen.kt` ~2255→**~1817** extrayendo la
+rama **Google Maps nativo** del `when (mapProvider)` (CAPA 1: MAPA) al composable top-level
+`GoogleMapLayer` en `ui/WorldMapScreenGoogle.kt` (~458 líneas movidas). Captura solo 7 símbolos →
+parámetros: `uiState`, `viewModel`, `context`, `roadNetwork`, `allCollectibles`, `landmarkBitmapCache`,
+`googleMapsIconCache` (las cachés LRU se pasan, no se recrean). Sin gotcha miembro/extensión (composable
+top-level); las extensiones del VM usadas se importan (`onMapZoomChanged`/`selectLandmark`/
+`moveSelectedLandmark`); helpers/consts del mismo paquete (`npcVisionRadiusMeters`/`npcWithinRadius`/
+`emojiToDrawable`/`drawHealthBarOnDrawable`/`ExactSizeDrawable`/`NPC_FOG_VISION_METERS`) se ven sin import.
+Archivo nuevo en LF.
+
+**🆕 Progreso (2026-06-21, 8ª pasada Compose):** `WorldMapScreen.kt` ~1817→**~1325** extrayendo la
+rama **WEB** (`else ->`, Leaflet en `AndroidView`/`WebView`, ~520 líneas) al composable top-level
+`WebMapLayer` en `ui/WorldMapScreenWeb.kt`. Captura 23 símbolos → parámetros (más que Google): además
+de `uiState`/`viewModel`/`context`/`roadNetwork`/`allCollectibles`, pasa `cachingClient`
+(`CachingWebViewClient`), `webViewRef`, `gson`, `coroutineScope`, las cachés base64/tamaños
+(`base64Cache`/`widthCache`/`heightCache`/`registeredWebImages`) y los **holders de guarda por-frame**
+(`lastWebNpcHolder`/`lastWebLandmarkHolder`/`webLmTick`/`lastWebMetroHolder`/`webMetroTick`/`lastWebIpOn`/
+`lastWebIpLm`/`lastWebIpColl`/`lastWebPoliceHolder`/`lastWebZombieHolder`) — son `Array`/`IntArray`/
+`BooleanArray` mutables, así que el estado de guarda SIGUE vivo entre frames (no se rompe el anti-reenvío).
+`buildHtml`/`MapJsBridge`/`CachingWebViewClient`/`NpcWebPayload`/`LandmarkWebPayload` son del mismo paquete
+(sin import); OJO: el archivo nuevo SÍ necesita `import kotlinx.coroutines.launch` (las coroutines de
+generación de base64). Archivo nuevo en LF. **WorldMapScreen ya <1500 ✅.** Las 3 ramas del `when` ahora
+delegan: `NativeOsmMap` / `GoogleMapLayer` / `WebMapLayer`.
+
+**🆕 Progreso (2026-06-21, reorg domain/models — package-move con Android Studio):** los **15 archivos
+planos** que colgaban directo de `domain/models/` se movieron al subpaquete **`domain.models.map`**
+(carpeta `domain/models/map/`): `ActiveCollectible`, `CharacterVisualConfig`, `EscomBuildings`
+(incl. `InteriorBuilding`/`EscomBoundingBox`), `ExteriorCollisionsConfig` (incl. `CollisionWall`/
+`CollisionPolygon`), `InteriorEntryCatalog`, `Landmark`, `Landmarkassetcatalog`, `MapNode`, `MapWay`,
+`MetroStation`, `MetrobusStation`, `Npc` (incl. `CarModel`/`NpcType`/`NpcTrait`/`ZombieRole`/`NpcNavState`),
+`ShineCTOLocation`, `TeleportCatalog`. Los subpaquetes `ai/ campaign/ zombie/` se quedan igual. Se hizo
+con **Refactor → Move** de Android Studio (actualiza las ~308 referencias atómicamente; NO es viable a
+mano sin compilador, ver §0 abajo). **⚠️ GOTCHA NUEVO:** el Move de AS **SE SALTA los archivos que están
+ABIERTOS/sin guardar** en el editor → `WorldMapState.kt` quedó con sus imports/FQN viejos
+(`domain.models.MetroStation`…) y rompió `MainActivity` (`station.name` sin resolver). Fix: actualizar a
+mano sus refs a `.map` **respetando** las de `ai.`/`campaign.` (que NO se movieron). Al hacer un
+package-move en AS: **cierra/guarda todos los archivos antes**, y tras compilar arregla cualquier
+`Unresolved reference` restante (mismo patrón: añadir `.map`).
+
+**⚠️⚠️ GOTCHA CRÍTICO — NO arregles los stragglers de un package-move con un Find&Replace "a secas":**
+intentar `domain.models.` → `domain.models.map.` en todo el proyecto es un DESASTRE: (1) **dobla** los que
+ya estaban bien (`domain.models.map.X` → `domain.models.map.map.X`), (2) **prefija los subpaquetes**
+(`domain.models.ai/campaign/zombie` → `…map.ai`…) y hasta los `package`. Y si encima el Replace corre en
+**case-INSENSITIVE** (default peligroso), un correctivo como `domain\.models\.map\.map` → `domain.models.map`
+**se come el `.Map`/`.Zombie` de los tipos** y los muta: `MapWay`→`mapWay`, `MapNode`→`mapNode`,
+`ZombieRole`→`zombieRole` (pasó de verdad; horas perdidas). **Reglas para package-moves:** (a) hazlos con
+**Refactor → Move** de AS (no a mano); (b) si AS deja stragglers, arréglalos **uno por uno a mano** o con un
+Find&Replace de **TEXTO PLANO** sobre el string EXACTO roto (p. ej. `domain.models.mapWay` →
+`domain.models.map.MapWay`), nunca con un prefijo genérico; (c) si usas regex, **CASE-SENSITIVE + grupo de
+captura**: `domain\.models\.([A-Z]\w*)` → `domain.models.map.$1` (ese solo toca tipos en Mayúscula y nunca
+los subpaquetes en minúscula). Verifica al final con búsquedas que den 0: `domain.models.map.map`,
+`domain.models.mapWay`, `domain.models.mapNode`, `domain.models.zombieRole`.
+
+**ES:** Archivos AÚN candidatos a dividir (al 2026-06-21): `WorldMapViewModel.kt` (~2503, único >1500;
+muy separado, resto = de-dup de gemelos CON COMPILADOR), `WorldMapScreen.kt` (~1325, **<1500 ✅**; opcional:
+builder del menú Opciones),
+`NativeOsmMap.kt` (~1457, parcialmente separado), `NpcAiManager.kt` (~882, **<1000 ✅**; si se quiere
+seguir, queda el cluster de spawn `spawnNpcOnRoad`/`spawnParkedCar`/`spawnCampusPedestrian`/
+`getAvailableParkingSlots` y `updateNpcs` ~370), `ZombieGameViewModel.kt`
+(~1120, ya parcialmente separado). Plan SEGURO: extraer SOLO bloques cohesivos cuyas funciones toquen
+exclusivamente miembros `internal`/`public` (o pasar a `internal` los `private` que necesiten, como en
+NpcAiManager), a nuevos `WorldMap*.kt`/`ZombieGame*.kt`/`NpcAiManager*.kt`, verificando que NO existan
+gemelos miembro (gana el miembro) y conservando CRLF. Para `WorldMapScreen`/`NativeOsmMap` (Compose),
+extraer composables/clases por sección. Pasos pequeños y verificables, uno por archivo.
+
 ## 1. Convenciones MVVM / MVVM conventions
 
 - Estado **siempre** como copia inmutable: `_state.update { it.copy(...) }`. Nunca mutar estado Compose
@@ -64,6 +227,34 @@ px-por-metro), `PlayerCharacter` (jugador a pie/conduciendo). El sprite nativo u
 - **Lambda `update` de osmdroid corre ~30 Hz → mantenerla barata:** landmarks estáticos solo
   re-`setPosition`/`setImage` cuando cambia su firma (`landmarkSigCache`); puertas `DOORS/` sí cada frame;
   ~160 marcadores de metro culleados por viewport (`Marker.isEnabled`).
+- **🆕 Micro-opts GC (2026-06-20, 7ª pasada, SIN cambio de comportamiento):**
+  - `FogOverlay.draw` (~30 Hz): el `IntArray`/`FloatArray` del `RadialGradient` se **reutilizan** como
+    campos (`fogColors`/`fogStops`); `RadialGradient` COPIA su contenido al construirse, así que mutar
+    `fogStops[1]` cada frame es seguro. Antes asignaba 2 arrays nuevos por frame. **El propio
+    `RadialGradient` sí se recrea cada frame** (el centro = píxel del jugador cambia); no se puede cachear
+    sin reintroducir overdraw. No volver a `intArrayOf(...)`/`floatArrayOf(...)` inline en `draw`.
+  - `NativeOsmMap.update`: la densidad se lee UNA vez por frame en `screenDensity` (línea ~259). Cuatro
+    sitios re-llamaban `context.resources.displayMetrics.density` (waypoints policía/zombi/objetivo +
+    marcador metrobús, este último con un `val screenDensity` que **sombreaba** el de arriba) → ahora todos
+    usan el `screenDensity` cacheado. Usar SIEMPRE `screenDensity`, no re-leer `displayMetrics` dentro del loop.
+  - **🆕 (8ª pasada, 2026-06-21) `NpcAiManager` tick:** `cachedWayBoxes.get().map { it.way }` se
+    materializaba la lista COMPLETA de vías en cada chequeo de spawn (zombi/horda/policía) por tick. Ahora
+    se precomputa UNA vez al fijar la red (`cachedWaysFiltered` en `updateRoadNetwork`, derivado de los
+    mismos `boxes`) y los 3 sitios solo leen `cachedWaysFiltered.get()`. Mismo contenido (vías con nodos
+    no vacíos), cero comportamiento.
+  - **Ya bien optimizado (NO tocar a ciegas):** el render OSM nativo NO asigna `Paint`/`Path`/`Rect` por
+    frame (usa Markers/Overlays cacheados + `nativeDrawableCache` LRU); `PlayerCharacter` usa `remember` +
+    cachés de bitmaps y `Color(0x…)` es value-class (sin allocation). El grueso del perf de gama baja ya
+    estaba afinado (caps de NPC por `popFactor`, LOD de emojis, fog por renderer, guards de reenvío web).
+  - **Descartado (NO seguro sin compilador / cambiaría comportamiento):** convertir el JS de
+    `WorldMapLeafletHtml` a *template literals* (`` `${x}` ``) — ese JS vive dentro de Kotlin `"""..."""` y
+    `${...}` lo captura la interpolación de Kotlin → rompe. Cachear por referencia los
+    `npcs.filter{...}.map{it.id}.toSet()` por-frame de NPCs que hablan/gritan/llaman: su predicado depende
+    del tiempo (`nowB`), cambia cada frame, así que cachear por referencia de `uiState.npcs` DEJARÍA
+    marcadores obsoletos (regresión). Guardar `updateTalkBubbles([])`/`updateRoads('[]')` cuando van vacíos:
+    el array vacío es justo lo que LIMPIA los marcadores; saltarlo deja burbujas/calles fantasma. Mover
+    `configureOsmdroid` (I/O de `mkdirs`/SharedPrefs en main thread) a background: cambia el orden de
+    arranque (osmdroid debe configurarse antes del 1er render) → requiere app para verificar.
 
 ## 7. Mapa web `#map-wrapper` / web map wrapper
 
@@ -128,17 +319,28 @@ matrices por defecto son **border-only** hasta reemplazarse.
   paréntesis desbalanceados, no de muchos símbolos faltantes (ver 01).
 - **Refactor de tamaño (parciales NUEVOS):** `WorldMapViewModel.kt` bajó de ~3400 a ~2600 líneas
   extrayendo bloques SIN gemelo de extensión a `WorldMapProviders.kt` (proveedores/tiles/compuertas),
-  `WorldMapDesigner.kt` (landmarks/diseñador) y `WorldMapWanted.kt` (wanted/policía/carjack). El
+  `WorldMapDesigner.kt` (landmarks/diseñador), `WorldMapWanted.kt` (wanted/policía/carjack) y —2ª
+  tanda, 2026-06-20— `WorldMapCombat.kt` (combate), `WorldMapCampaign.kt` (`setStorySpawn`),
+  `WorldMapTeleport.kt` (teleport+metro) y `WorldMapShineCTO.kt` (easter egg+fade puerta) (ver §0). El
   ESTADO sigue en el VM (`providerPreloadJob`, `mapPrepStarted`, `escomNavGraph`, `carjackStartTime`…);
   los parciales solo tienen lógica. Los call-sites FUERA del paquete `viewmodel` (UI, MainActivity)
   necesitan **import explícito** de cada extensión. Además se ELIMINARON los duplicados miembro de
   `updateNpcsState` (gemelo idéntico en `WorldMapMultiplayer.kt`) y de `ensureIndex`/`candidates`/
   `getNearestPointOnNetwork`/`project` (el gemelo de `WorldMapRouting.kt` se sincronizó ANTES con el
   check de landmarks que solo tenía el miembro) — esas extensiones son ahora la única implementación.
-  Pendiente (con compilador a la mano): sincronizar y de-duplicar los pares grandes
-  (`startGameLoop`, `handleMultiplayerMessage`/`addRemoteEntity`, `updateVisibleRoads`,
-  `applyRoadNetwork`, `maybeRefetchRoadNetwork`, `spawnOustedDriver`, `triggerWastedSequence`,
-  `startHealthBarTimer`), donde el MIEMBRO sigue siendo el canónico.
+  **✅ De-dup de gemelos COMPLETA (2026-06-21).** Los 8 pares quedaron resueltos (registro completo en
+  `§12 (registro de de-dup, consolidado aquí)`). Resumen: **de-dup limpio** (sincronizar extensión al miembro y borrar el
+  miembro) = `startHealthBarTimer`, `applyRoadNetwork`, `spawnOustedDriver`, `triggerWastedSequence`,
+  `addRemoteEntity`, `maybeRefetchRoadNetwork`, `updateVisibleRoads`. **Fusionados** (se activó lógica
+  buena que estaba muerta, con OK del dueño) = `handleMultiplayerMessage` (isRemote sync + daño en hilo
+  Main + miedo al combate) y `startGameLoop` (audio del game loop). **NO TOCAR / revertido** =
+  `updateDestinationRoute`+`calculateRouteOnNetwork` (cadena de routing interdependiente: de-duplicar la
+  cabeza re-enlazaba toda la cadena y rompía la navegación → se dejó con miembro canónico + extensión
+  muerta inofensiva). `WorldMapGameLoop.kt` es ahora un tombstone (startGameLoop = solo miembro con audio).
+  **Proceso usado (por si hay que de-dup futuros gemelos):** (1) leer miembro + extensión, (2) DIFERENCIAR,
+  (3) revisar TODA la cascada (qué llama y si esos callees son gemelos divergentes — fue lo que rompió
+  el par de routing), (4) sincronizar/fusionar la extensión y borrar el miembro, (5) COMPILAR + PROBAR.
+  Un par por ciclo; no agrupar sin compilar (no se bisecaría una regresión).
 - **Gotcha de parciales (¡importante!):** funciones duplicadas como **miembro privado** en
   `WorldMapViewModel.kt` + **extensión** del mismo nombre en `WorldMap*.kt`. Cuando se llaman desde
   DENTRO de la clase (caso de `startGameLoop()`, invocado en `WorldMapViewModel.kt:399`), **gana el
@@ -289,7 +491,10 @@ matrices por defecto son **border-only** hasta reemplazarse.
   `ZOOM_DRIVING=21`, ≥85% MAX_SPEED `ZOOM_DRIVING_FAST=20` (vuelve a 21 bajo el 65%). El pinch del
   usuario se respeta entre transiciones. **NO cambies `zoomLevel` directamente en transiciones;**
   el game loop interpola `zoomLevel` hacia `targetZoomLevel` (~1 nivel por tick) para evitar el
-  "shock" visual brusco al robar/salir de un auto. No volver a clavar el zoom web a 19 (`setMapProvider`
+  "shock" visual brusco al robar/salir de un auto. **GOTCHA:** cualquier acción que fije `zoomLevel`
+  a mano (`zoomIn/zoomOut/onMapZoomChanged/zoomToPlayer`) DEBE fijar TAMBIÉN `targetZoomLevel`, o el
+  `updateAutoZoom()` del siguiente tick arrastra el zoom de vuelta y "rebota" (era el bug de "Hacer
+  zoom en el jugador" tras un zoom out). No volver a clavar el zoom web a 19 (`setMapProvider`
   ahora capea a 22; `ZOOM_GAMEPLAY_WEB=19` es solo el nivel de pre-descarga de tiles).
 - **Fixes de estabilidad (TP/skin/ESCOM):** (a) el snap-to-road de `moveCharacter`/`moveCharacterByAngle`
   **ignora el movimiento** si la calle más cercana está a > `MAX_SNAP_DISTANCE_DEG` (0.0003 ≈ 33 m) — antes
@@ -407,23 +612,220 @@ matrices por defecto son **border-only** hasta reemplazarse.
   - **Cambio de idioma sin AppCompat:** `i18n/LocaleHelper.wrap(ctx, tag)` envuelve el Context en
     `MainActivity.attachBaseContext`; la elección se persiste en `SettingsRepository.get/saveLanguage`
     ("" = sistema) y el selector (`SettingsScreen` → Interfaz) **recrea la Activity** al cambiar.
-  - **Migración por feature (fases):** ya migrados `main_menu` y `settings` (patrón). Pendiente: el resto
-    de features (los grandes `map_exterior`/`interiores.zombies` concentran la mayoría de strings). NO migrar
-    rutas de assets, tipos de mensaje de red (`"PLAYER_UPDATE"`…), tags de log ni URLs: NO son texto de UI.
+  - **Migración por feature (fases) — actualizado 2026-06-21:**
+    - **YA migrados:** `main_menu`, `settings`; **`map_exterior` (player-facing):** misión fallida
+      (`wm_mission_failed/_retry_mission/_exit_to_menu`), tip carjack, guardar partida (`wm_opt_save_game`),
+      widget de objetivo (`wm_objective_label/_done`, `wm_dist_km/_m`), descripción completa de Prankedy
+      (`wm_prankedy_desc_full`); **paneles Modo Desarrollador** Debug Interiores (`dbg_*`) y diseñador de
+      landmarks (ANCHO/ALTO → `wm_designer_width/_height`); **`campaign`** (`StoryModeScreen` slot
+      `story_choose_slot`; `StoryIntroScreen`: `story_intro_back/_skip/_start`, hints `story_tap_*`, editor
+      de cómic `story_ed_*`); **`interiores` (player-facing):** ZombieHud (`zhud_inv_empty/_has_key`,
+      `cd_key`), ZombieGameScreen (`zgame_key_prompt`, `zgame_objective_investigate`, guardar reusa
+      `wm_opt_save_game`), InteriorScreenBase (`cd_exit`), InteriorPlayerViews (`cd_player`,
+      `cd_player_remote`); **`MainActivity`** diálogos guardar/cargar (`save_dialog_load/_new_slot`,
+      `save_toast_saved`). Paridad ES+EN verificada (Read, no `grep` de bash que TRUNCA `strings.xml`).
+    - **✅ TAMBIÉN YA migrados (2026-06-21):** transit player-facing (`MetrobusMapOverlay` selección de
+      destino — reusa claves del Metro ya migrado + nuevas `cd_metrobus_map`/`int_metrobus_select_dest`/
+      `int_save_waypoints`/`int_metrobus_select_station`; `MetrobusStationInteriorScreen` header
+      `int_metrobus_header`, `int_press_x_door`, `cd_exit`) y los **diseñadores de matrices**
+      (metro/metrobús/zombi): MATRIZ/WAYPOINTS/PARED/BORRAR/GUARDAR + ANCHO/ALTO/COL/FIL + hints →
+      claves compartidas `int_matrix`/`int_waypoints`/`int_wall`/`int_erase`/`int_save`/`int_w_minus`/
+      `int_w_plus`/`int_h_minus`/`int_h_plus`/`int_col_minus`/`int_col_plus`/`int_row_minus`/`int_row_plus`/
+      `int_grid_paint`/`int_designer`/`int_move_handle` (+ reuso de `int_drag_door`/`int_touch_door`/
+      `int_size_grid`/`int_waypoint_size`/`int_save_unsaved`/`ig_reset`/`ig_export`/`ig_import`/`ig_exit`).
+      ZombieHud (`zhud_inventory`, `cd_zombie`). **i18n player-facing = COMPLETA.**
+    - **PENDIENTE menor:** `CampaignObjective.title/description` siguen como `String` en el modelo
+      (i18n total = pasarlos a `@StringRes` + resolver en la View; esfuerzo medio, requiere compilar).
+    - **NO migrar:** rutas de assets, tipos de mensaje de red (`"PLAYER_UPDATE"`…), tags de log, URLs,
+      claves de caché de sprites, unidades (`km/h`, `HP`), comparaciones por dato (`"Objeto Misterioso ESCOM"`),
+      ni `displayName` propios (skins `Lázaro`/`Robot Estudiantx`, `Shine CTO`, `PRANKEDY`). `CampaignObjective.
+      title/description` siguen como `String` en el modelo (i18n completo = pasarlos a `@StringRes`, cambio de
+      medio esfuerzo que requiere compilar).
   - **Claves:** `snake_case`, prefijadas por feature (`menu_*`, `settings_*`). Toda clave nueva va en
     `values/` **y** `values-en/` (una contradicción/ausencia = bug; mantén la paridad).
+- **🆕 Control por defecto = `JOYSTICK`:** lo fija `SettingsRepository.getControlType()` (default JOYSTICK,
+  antes DPAD). Como TODOS los VMs leen el tipo de ahí al iniciar (`WorldMapViewModel`, `ZombieGameViewModel`,
+  `InteriorViewModel`, `MetroInteriorViewModel`, `ShineCTOViewModel`), basta ese cambio; los defaults de los
+  `*State` (`WorldMapState`, `SettingsState.controlType`/`tempControlType`) se pusieron en JOYSTICK por
+  coherencia del primer frame. DPAD sigue eligible en Ajustes → Controles (no se persiste hasta GUARDAR).
+- **🆕 Controles a la MISMA ALTURA (global = interiores):** la fila de controles del mapa global
+  (`WorldMapScreen`) se igualó a la de interiores (`ZombieHud`): `sidePadding 8/32`, `bottomPadding 32/20`,
+  `maxScale 0.95/1.3` (portrait/landscape) **+ `.systemBarsPadding()`** en el `Row`. Si retocas una, ajusta
+  la otra para que no se desincronicen.
+- **🆕 Orientación = SOLO por RUTA (las pantallas NO la fijan):** la orientación la decide ÚNICAMENTE
+  `MainActivity` por destino de navegación (in-game = `SENSOR_LANDSCAPE`; menús de ruta `main_menu`/
+  `story_mode`/`settings`/`collectibles` = `UNSPECIFIED`). **El menú de Opciones in-game NO cambia la
+  orientación.** (Se probó un `LaunchedEffect(optionsExpanded)` que rotaba al abrir Opciones, pero al usuario
+  le resultó molesto y se REVIRTIÓ: rotar = solo en una RUTA de menú, p. ej. Ajustes.) No re-añadir overrides
+  de orientación a nivel de pantalla. Ver 05.
+  - **🆕 Excepción `fromGame` en Ajustes:** Ajustes se abre desde el menú (vertical OK) y desde el JUEGO
+    (debe seguir horizontal). Se resuelve SIN tocar las pantallas: la ruta es `settings?fromGame={fromGame}`
+    (BoolType, default false). El menú principal navega a `settings` (fromGame=false → `UNSPECIFIED`); el juego
+    navega a `settings?fromGame=true` (→ `SENSOR_LANDSCAPE`). El `OnDestinationChangedListener` lee
+    `arguments?.getBoolean("fromGame")` del Bundle del destino y, si es true, NO trata Ajustes como menú
+    vertical. Sigue siendo "orientación por RUTA" (el arg es parte de la ruta). ⚠️ Por el `?fromGame=...`, los
+    chequeos de ruta exacta deben usar `route?.startsWith("settings")` (ya ajustado en `onNavigateBack`).
+- **🆕 NPCs de IA = `remoteEntities` es la FUENTE DE VERDAD (no `serverNpcs`):** en el game loop, cada
+  ~3 ticks `setServerNpcs(remoteEntities.filter{displayName vacío})` **CLEAR+refill** la lista del motor
+  desde `remoteEntities`; tras simular, el host vuelca `getServerNpcs()` de vuelta a `remoteEntities` y
+  `updateNpcsState()` los pinta. Por eso, para INYECTAR NPCs persistentes hay que meterlos en
+  `remoteEntities` (con `displayName` vacío); meterlos solo en `serverNpcs` se borra al siguiente re-sync.
+  `NpcAiManager.addServerNpcs(list)` existe para sembrarlos sin esperar un tick, pero la persistencia vive
+  en `remoteEntities`. Single-player: `isServerDelegatedHost=true` (default) → la simulación corre.
+- **🆕 60 NPCs que CAMINAN por la ruta roja de campaña (`WorldMapCampaignRouteNpcs.kt`):** desde
+  `campaignRouteWaypoints` se arma un `MapWay` virtual (ids negativos para no chocar con OSM,
+  `isForPeople=true`) y 60 `Npc` con `currentWay`=esa ruta. `moveNpc` los lleva nodo a nodo; al no haber
+  vías conectadas en los extremos (ids negativos no están en `nodeToWays`), **invierten la dirección** →
+  van y vienen. Llevan id con prefijo `NpcAiManager.ROUTE_NPC_PREFIX` (`"CAMPAIGN_ROUTE_"`) que los deja
+  **EXENTOS del despawn por distancia y del cull por `maxTotalNpcs`** (si no, se borraban lejos del
+  jugador); fuera del `simRadius` se ponen `isMoving=false` (no “caminan en el sitio”) y si `moveNpc`
+  devuelve null NO se despawnean (se quedan quietos). Disparo: automático en `maybeSpawnPrankedyCompanion`
+  (escolta) y manual con el botón del panel Debug Interiores (`toggleCampaignRouteNpcsDebug`). Se limpian
+  en `maybeHideCampaignRouteNearEscom` y en `clearCampaignPolice`.
+- **🆕 REMATE Misión 2: la policía se reúne donde Prankedy SE METIÓ:** al entrar Prankedy a la ESCOM se
+  guarda su posición exacta en `mission2PrankedyExitPoint`; `runMission2Tick` pasa ESE punto a
+  `startResolution` (antes pasaba la puerta del objetivo, unos metros más allá). Se resetea en
+  `startMission2`/`clearCampaignPolice`.
+- **🆕 Panel Debug Interiores movible + Salir (`InteriorDebugEditorPanel`):** el editor de líneas de
+  colisión del mapa global ahora es movible/redimensionable/scroll (mismo patrón que el panel del
+  diseñador de matrices: asa con `detectDragGestures`, `graphicsLayer` scale −/+, `heightIn(max=90%)` +
+  `verticalScroll`) y tiene botón **"Salir"** (`onExit` → `setDebugEditTool(NONE)` +
+  `toggleInteriorDebugOverlay(false)`). Aloja además el botón de debug de los NPCs de ruta.
+- **🆕 AUTENTICACIÓN (Firebase Auth + Google Sign-In):** el **multijugador** (y, a futuro, los logros)
+  exige iniciar sesión; el **juego local y el Modo Historia NO**. Piezas:
+  `data/auth/AuthManager.kt` (login Google→Firebase, token, signOut, **deleteAccount**) y
+  `data/auth/AuthSession.kt` (singleton con `uid`/`idToken`; lo lee `WebSocketManager` para mandar la
+  cabecera `Authorization: Bearer <token>` en el handshake → ambos servidores la verifican). El **gate**
+  vive en `MainMenuScreen` (botón MULTIJUGADOR: si no hay sesión, abre el selector de Google y al volver
+  continúa el flujo) y en **Ajustes → Cuenta** (`SettingsCategory.Account` + `AccountSettings`):
+  iniciar/cerrar sesión y **"Eliminar mi cuenta y datos"** (borra la cuenta en Firebase + datos locales
+  vía `onAccountDeleted` en `MainActivity`: limpia slots de `SaveGameRepository` + `CampaignRepository`).
+  `AuthManager` es **DEFENSIVO**: sin `google-services.json` no crashea (devuelve null/false), pero el
+  build de Gradle SÍ requiere el json (plugin `com.google.gms.google-services` aplicado). El UID de
+  Firebase reemplaza al UUID de dispositivo como id de jugador (`myPlayerUUID`). **Gotcha:** el web client
+  id se lee DINÁMICO (`getIdentifier("default_web_client_id")`) para que el código compile aunque el
+  recurso aún no exista. Ver 08 (verificación en servidores).
+  - **Extras de UX/robustez:** `MainActivity` llama `authManager.refreshToken{}` ANTES de
+    `connectToMultiplayer` (el ID token caduca ~1 h). El menú muestra un **chip de sesión**
+    ("Conectado: …" / "Modo local"). El **nombre de jugador** se recuerda en
+    `SettingsRepository.get/savePlayerName` (se prellena; si hay sesión y está vacío, usa el nombre de
+    Google). **`PowApplication`** (registrada en el Manifest) inicializa Firebase temprano y a prueba de
+    fallos. Cancelar el selector de Google (códigos 12501/16) NO muestra error. El enlace a la política de
+    privacidad (`R.string.settings_privacy_url`) vive en Ajustes → Cuenta. Plantillas de entorno de los
+    servidores en `Multiplayer/.env.example` y `MultiplayerInteriores/.env.example`.
+  - **⚠️ Secretos / no commitear:** `app/google-services.json`, `*.jks` (llave de firma), el JSON del
+    service account de firebase-admin y `secrets.properties` están en `.gitignore` (verificado). El service
+    account NO va al repo: vive como variable `FIREBASE_SERVICE_ACCOUNT` en Render. Ningún secreto debe
+    entrar en código fuente ni en estos docs.
+- **🆕 Modo Desarrollador (`developerMode`, Ajustes → Interfaz, default oculto):** switch persistente con el
+  mismo patrón que los widgets (`SettingsRepository.get/saveDeveloperMode`, `SettingsState.developerMode`,
+  `SettingsViewModel.toggleDeveloperMode`, wired en `MainActivity.onDeveloperModeToggled`). Revela botones de
+  prueba que con el modo APAGADO quedan ocultos para el jugador. **Cableado (cada pantalla lee
+  `SettingsRepository(context).getDeveloperMode()` UNA vez al entrar):**
+  - `StoryIntroScreen`: oculta el botón **"Editar"** (editor del cuadro de texto del cómic).
+  - `ZombieGameScreen` (interiores, menú Opciones): oculta **"Diseñador"**; y **"Salir al mapa"** solo cuando
+    la sala está en la cadena `ZombieRoomCatalog.ENCB_STORY_ROOM_IDS` (Misión 1) → `developerMode || !inMission1`.
+  - `WorldMapScreen` (mundo, menú Opciones): oculta **"Teletransportarse"**, el grupo **"Diseñador / Debug"**
+    (Modo Diseñador + Debug Interiores + Agregar asset), **"Activar/Desactivar Apocalipsis"** y el toggle de
+    **Prankedy**.
+  Como se lee con `remember` al entrar, el cambio aplica al re-entrar a la pantalla (no en vivo). Strings
+  `settings_developer_mode`/`_desc` (es+en).
+- **🆕 Widget de coordenadas X/Y/Z (`showCoordsWidget`, Ajustes → Interfaz, default oculto):** composable
+  reusable `CoordsWidget(x,y,z)` en `GameControllers.kt`. Z = "dónde": **GLOBAL** en el mundo abierto
+  (`WorldMapScreen`, X=lon, Y=lat), o el **nombre de la sala/interior** en interiores (`ZombieHud` con
+  `roomName`, `InteriorScreenBase` con `title`; X/Y = posición del jugador). Toggle con el mismo patrón que
+  zoom/velocímetro: `SettingsRepository.get/saveShowCoordsWidget`, campo en `SettingsState`/`WorldMapState`/
+  `ZombieGameState`/`InteriorState`, push en vivo al mapa desde `MainActivity`. Métro/Métrobus/ShineCTO aún
+  no lo muestran (mismo patrón si se desea: añadir `showCoordsWidget` a su `*State` + `CoordsWidget` al HUD).
+  **`CoordsWidget` es un CHIP DE UNA SOLA LÍNEA** con el MISMO estilo/tamaño que `CacheChip` (fondo
+  `Black α0.72`, `RoundedCornerShape(20.dp)`, `padding(h10,v5)`, punto 8.dp, texto 11sp Medium): así TODOS
+  los widgets de Interfaz quedan uniformes en altura (antes era un bloque de 3 líneas y se veía más alto).
+- **🆕 Volumen separado música/efectos (Ajustes → Audio):** persistido en `SettingsRepository`
+  (`get/saveMusicVolume`/`SfxVolume`, default 1.0), `SettingsState.musicVolume`/`sfxVolume`,
+  `SettingsViewModel.changeMusicVolume`/`changeSfxVolume`. **`SoundManager` es la autoridad de audio:**
+  `setMusicVolume` (→ `MediaPlayer.setVolume` en las 4 pistas) y `setSfxVolume` (multiplica cada `play()`
+  del `SoundPool` por `sfxVolume` y reajusta los streams en loop con `setVolume`). `SoundManager.init` LEE
+  el volumen del repo y lo aplica al arrancar; `MainActivity` lo empuja en vivo al cambiar el slider. Si
+  añades un nuevo `play()`, multiplica su volumen por `sfxVolume` (si no, ese efecto ignora el slider).
+- **🆕 TP entre salas = puerta↔puerta (`ZombieGameViewModel.goToRoom`):** al cambiar de sala se spawnea
+  JUNTO a la puerta del cuarto DESTINO cuyo `targetRoomId == fromRoom.id` (no en el centro). Cubre la cadena
+  ENCB (Continuar↔Regresar) y los vecinos de edificios. **⚠️ El spawn se DESPLAZA ~30% hacia el centro
+  (`k=0.30f`), NO sobre el hitbox de la puerta:** `onInteract` dispara la puerta cuyo hitbox CONTIENE al
+  jugador, así que spawnear encima hacía que la siguiente X re-disparara esa puerta y te REGRESARA (rebote
+  lobby↔salón → "Continuar" no avanzaba). No quitar el desplazamiento. EXCEPCIÓN: "lobby → edificio" mantiene
+  spawn central + siembra de zombis; "edificio → lobby" sigue con `spawnAtLobbyDoorFor`. Ver 06.
+- **🆕 Menús de pantalla completa vs barra del sistema:** las pantallas de menú (p. ej. `CollectiblesScreen`)
+  deben usar `systemBarsPadding()` para que sus botones (p. ej. "VOLVER AL MENÚ") no queden tapados por la
+  barra de gestos/navegación del teléfono. (Las de campaña ya usaban `windowInsetsPadding`.)
+- **🆕 Nombres de escuela de campaña = institución:** `SchoolCatalog` muestra `IPN` (`id="escom"`) y `UNAM`
+  (`id="fes_aragon"`); los `id` NO cambian (alimentan spawn/guardado). Botón `story_start = "NUEVA PARTIDA"`.
+- **🆕 Morir en una MISIÓN de campaña = MISIÓN FALLIDA (edita el MIEMBRO, no la extensión):**
+  `triggerWastedSequence` existe como **miembro privado** en `WorldMapViewModel.kt` (ACTIVO) **y** como
+  extensión en `WorldMapMisc.kt` (sombreada/muerta). La lógica "si `inCampaign` && objetivo
+  `ESCOLTAR_PRANKEDY`/`INGRESAR_ESCOM` → WASTED breve y `showMissionFailed=true` (REINTENTAR recarga el
+  checkpoint)" vivía SOLO en la extensión → no corría: morir respawneaba normal frente a ESCOM y el jugador
+  podía dejarse matar para saltarse la escolta. Fix: la rama de misión fallida está ahora en el **miembro**.
+  Clásico gotcap miembro vs extensión (ver arriba): **edita el miembro**.
+- **🆕 Ruta GPS de campaña = VERDE VIVO (no roja):** la línea ENCB→ESCOM (`campaignRouteWaypoints`) se pintaba
+  ROJA y se confundía con la ruta de destino (azul) y las líneas del debug (rojo/naranja). Ahora es **verde
+  vivo `#00E676`, gruesa** (`NativeOsmMap` `strokeWidth=16f`; Leaflet `weight 9`). Es "la ruta a seguir".
+- **🆕 Resize de la MATRIZ del diseñador (interiores) = ANCLADO:** en `DesignerToolbar` (`ZombieGameScreen`)
+  el bloque de tamaño (texto + `COL ±`/`FIL ±`) se sacó del scroll del medio y va **anclado abajo** (solo en
+  modo MATRIZ): en pantallas bajas quedaba al final del scroll y se recortaba → "desapareció el resize".
+- **🆕 Coords FIJAS de la campaña (constantes en `MissionCatalog`):** el Modo Historia usa puntos fijos en vez
+  de relativos al jugador (X=lon, Y=lat). `MISSION1_SPAWN` (19.50102, -99.14421) = entrada al mapa global tras
+  el outro = CHECKPOINT de la escolta (MainActivity lo usa en `setStorySpawn`). `ESCOM_FORCEWALK` (19.50500,
+  -99.14596, radio 50 m). Los policías de la Misión 2 salen de `MISSION2_POLICE_SPAWN` (19.50488, -99.14569,
+  en `WorldMapCampaignPolice`) y la multitud civil de `CROWD_SPAWN` (19.50512, -99.14625). Para reubicar algo,
+  cambia la constante (no hardcodees en otra parte).
+- **🆕 Reintento de misión = CHECKPOINT, no la posición guardada:** `retryCampaignMission` para la escolta
+  (`ESCOLTAR_PRANKEDY`) hace `setStorySpawn(MISSION1_SPAWN)` (no `loadGame`, que restauraba el START en ESCOM y
+  por eso "te teleportaba a ESCOM"). Captura el objetivo ANTES de cualquier `loadGame`.
+- **🆕 Coche obligado a pie cerca de ESCOM (Misión):** en la física del coche (game loop MIEMBRO), a <=50 m de
+  `ESCOM_FORCEWALK` y con objetivo escolta/ingreso, `forceWalkNearEscom` BLOQUEA el avance (gas) y anula la
+  velocidad positiva → SOLO reversa, para forzar bajarse y entrar a pie. No quitar el gate del objetivo (si no,
+  bloquearía el coche en mundo libre).
+- **🆕 Prankedy se SUBE al coche contigo (`prankedyBoarding`):** al abordar un coche con Prankedy ACOMPAÑANTE
+  (HIRED), `onInteractButtonPressed` pone `prankedyBoarding=true`; la física del coche NO avanza (speed=0) y
+  `runPrankedyTick` pasa `isDriving=false` al `tick` (Prankedy corre a pie hasta ti). Al llegar a <=5 m
+  (`PRANKEDY_BOARD_DIST_M`) o si murió, se limpia el flag (se "sube" → se oculta) y el coche ya avanza. El flag
+  se limpia también al bajarte. `runPrankedyTick` corre cada tick AUNQUE conduzcas (no gateado por isDriving),
+  por eso el abordaje se completa.
+- **🆕 Joystick en MODO MANEJO:** `VehicleJoystickController` (dirige izq/der por el eje X, press/release). En
+  `WorldMapScreen` la rama de conducción usa joystick si `controlType==JOYSTICK`, si no las flechitas
+  (`VehicleDPadController`). Gas/freno siguen en el diamante PS4.
+- **🆕 Multitud civil de ESCOM (Misión 2) = 50+ desde punto fijo:** `updateEscomCrowd` ahora spawnea desde
+  `CROWD_SPAWN` (no la puerta), `CROWD_MAX=55`, intervalo 150 ms; se alejan, se despawnean al salir del fog y se
+  reemplazan por nuevos. (Ojo gama baja: son NPCs PERSON; si pesa, baja `CROWD_MAX`.) **🆕 La multitud camina
+  HACIA `MISSION2_POLICE_SPAWN`** (~80%, por `id.hashCode()%5`) → multitud y policías van en direcciones OPUESTAS.
+- **🆕 Misión 2 (INGRESAR_ESCOM) se cumple con el PROMPT de la puerta:** `checkObjectiveProgress` marca el
+  objetivo cumplido EN CUANTO `nearbyCollectible` es un `escom_door_*` (prompt "Presiona X para entrar a la
+  ESCOM", ~20 m), sin tener que pegarse ni pulsar X. El X sigue ENTRANDO al interior.
+- **🆕 Prankedy entra a la ESCOM LENTO y visible (Misión 2):** `runMission2PrankedyEscape` ahora camina
+  (`playerRunning=false`), SIN snap a calles (beeline a la puerta, que está fuera de la vía → ya no "nunca
+  llega"), umbral de entrada `MISSION2_PRANKEDY_ENTER_DEG=0.00006` (~6.6 m, casi pegado) y pausa 2.4 s.
+- **🆕 Movimiento LIBRE del jugador sobre assets/landmarks (`isOnLandmark`):** `moveCharacter`/
+  `moveCharacterByAngle` suspenden el snap a calles si el jugador está SOBRE el footprint de un landmark
+  (caja `baseW/H × escala`). **Es SOLO para el jugador**: `isOnLandmark` NO se mete en `isFreeMovementZone`, así
+  las calles SIGUEN dibujándose y los NPCs SIGUEN atados a la malla vial. (En zonas ESCOM/ENCB ya era libre.)
+- **🆕 NavGraph sin `isForCars`/`isForPeople` → `normalizeNavGraph`:** Gson NO aplica los defaults de Kotlin a
+  campos AUSENTES del JSON. `escom_navgraph.json` no trae `isForCars`/`isForPeople` en las `ways` → llegaban
+  `false` y los autos del estacionamiento NO casaban con ningún carril (`matchType` en `NpcAiManager`) →
+  "no surten efecto". `normalizeNavGraph` (se aplica al cargar en `loadLandmarks` y `spawnDynamicCarInEscom`)
+  re-clasifica por convención de id (id<200=autos, id>=200=peatonal) las ways sin clasificar. Mismo gotcha que
+  el coalesce de `scaleX/scaleY` en `loadLandmarks`. (Los nodos de slot usan `isParkingSlot`.)
 
 ---
 
 ## 13. PROTOCOLO DE ACTUALIZACIÓN DE DOCS / DOC UPDATE PROTOCOL (obligatorio / mandatory)
 
-**ES:** `README.md` + `plan.artifact.md` + **esta carpeta** son la **única fuente de verdad** que se le
-pasa a un asistente en vez de todo el código. Solo sirven si se actualizan **en el mismo cambio** que
-toca el código. Trátalos como parte del entregable.
+**ES:** Esta carpeta (`00`–`09` + docs de trabajo) es la **única fuente de verdad** que se le pasa a un
+asistente en vez de todo el código (el README **público** de la raíz es la visión general para humanos).
+Solo sirve si se actualiza **en el mismo cambio** que toca el código. Trátala como parte del entregable.
 
-**EN:** `README.md` + `plan.artifact.md` + **this folder** are the **single source of truth** handed to an
-assistant instead of the whole codebase. They only work if updated **in the same change** that touches the
-code. Treat them as part of the deliverable.
+**EN:** This folder (`00`–`09` + working docs) is the **single source of truth** handed to an assistant
+instead of the whole codebase (the **public** root README is the human-facing overview). It only works if
+updated **in the same change** that touches the code. Treat it as part of the deliverable.
 
 ### Checklist (en CADA cambio que altere comportamiento / on EVERY behavior change)
 

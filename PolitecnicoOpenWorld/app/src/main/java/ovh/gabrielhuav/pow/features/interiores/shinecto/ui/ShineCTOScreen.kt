@@ -45,7 +45,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import ovh.gabrielhuav.pow.domain.models.ShineCTOFloor
+import ovh.gabrielhuav.pow.domain.models.map.ShineCTOFloor
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.*
 import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.Direction
 import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.GameAction
@@ -225,7 +225,7 @@ private fun InteractableDots(
 
     val shineBitmap = remember {
         try {
-            context.assets.open("collectibles/colec_shine.webp")
+            context.assets.open("SPRITES/COLLECTIBLES/colec_shine.webp")
                 .use { BitmapFactory.decodeStream(it)?.asImageBitmap() }
         } catch (e: Exception) { null }
     }

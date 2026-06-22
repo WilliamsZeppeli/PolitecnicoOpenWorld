@@ -1,0 +1,178 @@
+[
+  {
+    "id": 0,
+    "name": "Shine CTO",
+    "latitude": 19.45908368468466,
+    "longitude": -99.163338,
+    "assetPath": "BUILDINGS/BAR/Shine.webp",
+    "scaleFactor": 0.15,
+    "rotationAngle": 0.0,
+    "scaleX": 0.15,
+    "scaleY": 0.15
+  },
+  {
+    "assetPath": "BUILDINGS/IPN/building_escom.webp",
+    "id": 1,
+    "latitude": 19.504694288807826,
+    "longitude": -99.14663364364556,
+    "name": "Edificio ESCOM",
+    "rotationAngle": 25.819448,
+    "scaleFactor": 0.9854224,
+    "scaleX": 0.9854224,
+    "scaleY": 0.9854224
+  },
+  {
+    "assetPath": "BUILDINGS/IPN/plaza_torres.webp",
+    "id": 2,
+    "latitude": 19.506550602943516,
+    "longitude": -99.14413948878561,
+    "name": "Plaza Torres",
+    "rotationAngle": 0.0,
+    "scaleFactor": 1.0029263,
+    "scaleX": 1.0029263,
+    "scaleY": 1.0029263
+  },
+  {
+    "assetPath": "BUILDINGS/IPN/cic_edificios.webp",
+    "id": 3,
+    "latitude": 19.502893905236064,
+    "longitude": -99.14748337104784,
+    "name": "CIC",
+    "rotationAngle": 25.75529,
+    "scaleFactor": 1.0591303,
+    "scaleX": 1.0591303,
+    "scaleY": 1.0591303
+  },
+  {
+    "assetPath": "BUILDINGS/IPN/coyote_de_neza.webp",
+    "id": 4,
+    "latitude": 19.39979136155635,
+    "longitude": -99.02897079430511,
+    "name": "COYOTE DE NEZA",
+    "rotationAngle": 0.0,
+    "scaleFactor": 1.4665562,
+    "scaleX": 1.4665562,
+    "scaleY": 1.4665562
+  },
+  {
+    "assetPath": "BUILDINGS/IPN/fes_aragon.webp",
+    "id": 5,
+    "latitude": 19.474867,
+    "longitude": -99.04334399999986,
+    "name": "FES ARAGON",
+    "rotationAngle": 11.769556,
+    "scaleFactor": 1.0136231,
+    "scaleX": 1.0136231,
+    "scaleY": 1.0136231
+  },
+  {
+    "assetPath": "DOORS/ESCOM_DOOR.webp",
+    "id": 14,
+    "latitude": 19.5051,
+    "longitude": -99.14619999999998,
+    "name": "Puerta ESCOM",
+    "rotationAngle": 295.54773,
+    "scaleFactor": 1.1525397,
+    "scaleX": 1.1525397,
+    "scaleY": 1.1525397
+  },
+  {
+    "id": 16,
+    "name": "Deportivo Miguel Alemán",
+    "latitude": 19.493527319568926,
+    "longitude": -99.1285163718726,
+    "rotationAngle": 360.0,
+    "scaleFactor": 2.3671417,
+    "assetPath": "PLACES/deportivo_miguel_aleman/deportivo_miguelaleman.webp",
+    "scaleX": 2.3671417,
+    "scaleY": 2.3671417
+  },
+  {
+    "assetPath": "PLACES/plaza_lindavista/plaza_lindavista.webp",
+    "id": 17,
+    "latitude": 19.491605000000032,
+    "longitude": -99.13371099999956,
+    "name": "Plaza Lindavista",
+    "rotationAngle": 9.545767,
+    "scaleFactor": 0.6872067,
+    "scaleX": 0.6872067,
+    "scaleY": 0.6872067
+  },
+  {
+    "assetPath": "DOORS/ESCOM_DOOR.webp",
+    "id": 18,
+    "latitude": 19.4942,
+    "longitude": -99.1292,
+    "name": "Entrada Campo Béisbol",
+    "rotationAngle": 0.0,
+    "scaleFactor": 0.6,
+    "scaleX": 0.6,
+    "scaleY": 0.6
+  },
+  {
+    "assetPath": "DOORS/ESCOM_DOOR.webp",
+    "id": 19,
+    "latitude": 19.4928,
+    "longitude": -99.1278,
+    "name": "Entrada Campo Fútbol",
+    "rotationAngle": 0.0,
+    "scaleFactor": 0.6,
+    "scaleX": 0.6,
+    "scaleY": 0.6
+  },
+  {
+    "assetPath": "BUILDINGS/UAM_Azc/UAM_Azc_D.webp",
+    "id": 24,
+    "latitude": 19.503302494691965,
+    "longitude": -99.18495543723525,
+    "name": "UAM Azca (Der)",
+    "rotationAngle": 0.0,
+    "scaleFactor": 1.8429654,
+    "scaleX": 1.8429654,
+    "scaleY": 0.15
+  },
+  {
+    "assetPath": "BUILDINGS/UAM_Azc/UAM_Azc_Iz.webp",
+    "id": 26,
+    "latitude": 19.503301670025046,
+    "longitude": -99.18843913077218,
+    "name": "UAM Azca (Izq)",
+    "rotationAngle": 0.0,
+    "scaleFactor": 1.8429654,
+    "scaleX": 1.8429654,
+    "scaleY": 0.15
+  },
+  {
+    "assetPath": "BUILDINGS/CENTRAL/Central_norte.webp",
+    "id": 27,
+    "latitude": 19.479223101634144,
+    "longitude": -99.13899800970746,
+    "name": "Autobuses del Norte",
+    "rotationAngle": 0.0,
+    "scaleFactor": 1.5481718,
+    "scaleX": 1.5481718,
+    "scaleY": 0.15
+  },
+  {
+    "assetPath": "DOORS/ESCOM_DOOR.webp",
+    "id": 30,
+    "latitude": 19.475661999653365,
+    "longitude": -99.04685319953819,
+    "name": "Entrada FES Aragón",
+    "rotationAngle": 108.4186,
+    "scaleFactor": 1.408552,
+    "scaleX": 1.408552,
+    "scaleY": 1.3911047
+  },
+  {
+    "assetPath":"BUILDINGS/IPN/ENCB_lobby.webp",
+    "id": 32,
+    "latitude": 19.500129866709816,
+    "longitude": -99.1449129694528,
+    "name":"Lobby ENCB",
+    "rotationAngle": 27.584373,
+    "scaleFactor": 2.4214725,
+    "scaleX": 2.4214725,
+    "scaleY": 0.05
+  }
+]

@@ -113,24 +113,27 @@ import ovh.gabrielhuav.pow.features.map_exterior.ui.components.PoliceNpcSpriteMa
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Overlay
 import org.osmdroid.views.overlay.Polyline
-import ovh.gabrielhuav.pow.domain.models.EscomBoundingBox
-import ovh.gabrielhuav.pow.domain.models.InteriorBuilding
-import ovh.gabrielhuav.pow.domain.models.NpcType
-import ovh.gabrielhuav.pow.domain.models.TeleportCatalog
+import ovh.gabrielhuav.pow.domain.models.map.EscomBoundingBox
+import ovh.gabrielhuav.pow.domain.models.map.InteriorBuilding
+import ovh.gabrielhuav.pow.domain.models.map.NpcType
+import ovh.gabrielhuav.pow.domain.models.map.TeleportCatalog
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.ActionButtonsController
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.AssetPickerDialog
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.CharacterSpriteManager
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.CollectibleClaimDialog
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.PrankedyHireDialog
+import ovh.gabrielhuav.pow.features.map_exterior.ui.components.ObjectivesWidget
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.DPadController
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.DesignerPanel
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.OptionMenuGroup
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.OptionMenuItem
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.OptionsMenu
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.JoystickController
+import ovh.gabrielhuav.pow.features.map_exterior.ui.components.CoordsWidget
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.PlayerCharacter
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.VehicleSpriteManager
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.VehicleDPadController
+import ovh.gabrielhuav.pow.features.map_exterior.ui.components.VehicleJoystickController
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.Ps4ActionButtonsController
 import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.GameAction
 import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.MapProvider
@@ -148,6 +151,8 @@ import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.undoLastDebugShape
 import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.commitDebugStroke
 import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.clearDebugEdits
 import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.setDebugEditTool
+import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.DebugEditTool
+import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.toggleCampaignRouteNpcsDebug
 import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.exportDebugEditsToUri
 import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.importDebugEditsFromUri
 import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.loadLandmarks
@@ -164,6 +169,14 @@ import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.ZOOM_GAMEPLAY_WEB
 import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.RoadSource
 import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.TileSource
 import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.WorldMapViewModel
+// REFACTOR: zoom/cámara extraídos a WorldMapCameraUi.kt (extensiones) → import explícito.
+import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.onMapZoomChanged
+import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.centerOnPlayer
+import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.zoomToPlayer
+// REFACTOR: skin extraído a WorldMapSettings.kt (extensiones) → import explícito.
+import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.toggleSkinSelector
+import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.selectSkin
+import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.refreshSkin
 import ovh.gabrielhuav.pow.features.settings.models.ControlType
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -178,6 +191,10 @@ import ovh.gabrielhuav.pow.features.map_exterior.ui.components.PlayerSkin
 import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.dismissPrankedyDialog
 import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.onHirePrankedy
 import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.togglePrankedy
+// REFACTOR: extensiones del VM extraídas (teleport/puerta ESCOM) → import explícito.
+import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.teleportTo
+import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.toggleTeleportMenu
+import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.onEscomDoorFadeComplete
 import kotlin.math.cos
 import androidx.compose.runtime.DisposableEffect
 
@@ -223,9 +240,15 @@ fun WorldMapScreen(
     onNavigateToMainMenu: () -> Unit = {},
     onNavigateToSettings: () -> Unit,
     onNavigateToInterior: (String) -> Unit = {},
-    onRequestSaveGame: () -> Unit = {}
+    onRequestSaveGame: () -> Unit = {},
+    // MODO HISTORIA: reintentar la misión fallida sin volver al menú (recarga el slot activo).
+    onRetryMission: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    // Modo Desarrollador: si está APAGADO se ocultan los botones de prueba del menú de Opciones
+    // (Teletransportarse, Diseñador/Debug, Activar Apocalipsis, Desactivar Prankedy). Se lee al entrar.
+    val devModeContext = androidx.compose.ui.platform.LocalContext.current
+    val developerMode = remember { ovh.gabrielhuav.pow.data.repository.SettingsRepository(devModeContext).getDeveloperMode() }
     val roadNetwork by viewModel.roadNetworkFlow.collectAsState()
     val escomItems by viewModel.escomItems.collectAsState()
     val allCollectibles = uiState.activeCollectibles + escomItems
@@ -255,7 +278,8 @@ fun WorldMapScreen(
     }
     val gson = remember { Gson() }
     val coroutineScope = rememberCoroutineScope()
-    var yButtonHoldJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    // REFACTOR: `yButtonHoldJob` se movió a WorldMapControls.kt (la pulsación larga de Y/△
+    // vive ahora junto a los controles).
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri?.let { viewModel.exportLandmarksToUri(context, it) }
@@ -277,7 +301,7 @@ fun WorldMapScreen(
     // Nuevos estados para las interacciones del Diseñador
     var showDesignerHint by remember { mutableStateOf(false) }
     var showExitDesignerConfirm by remember { mutableStateOf(false) }
-    var originalLandmarkState by remember { mutableStateOf<ovh.gabrielhuav.pow.domain.models.Landmark?>(null) }
+    var originalLandmarkState by remember { mutableStateOf<ovh.gabrielhuav.pow.domain.models.map.Landmark?>(null) }
 
     // Efecto para controlar la leyenda efímera de 3 segundos
     LaunchedEffect(uiState.isDesignerMode) {
@@ -313,6 +337,20 @@ fun WorldMapScreen(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // El game loop del mapa global es Activity-scoped y NO se detiene al entrar a un interior; por eso
+    // su bloque de audio (stopWalk cada tick con el jugador exterior quieto) PISABA el sonido de pasos de
+    // los interiores. Marcamos cuándo el mapa global está en primer plano (gatea ese audio en el VM) y
+    // PARAMOS sus sonidos al salir del mapa, para que el interior gestione el suyo sin interferencia.
+    DisposableEffect(Unit) {
+        viewModel.worldMapForeground = true
+        onDispose {
+            viewModel.worldMapForeground = false
+            viewModel.soundManager.stopWalk()
+            viewModel.soundManager.stopRun()
+            viewModel.soundManager.stopCar()
+        }
     }
 
     // Cuando el video de carga termina y hay un destino pendiente, navegar.
@@ -361,11 +399,11 @@ fun WorldMapScreen(
     val webViewRef = remember { mutableStateOf<WebView?>(null) }
     // OPT gama baja: última lista de NPCs enviada al WebView. Solo reenviamos al JS
     // cuando la lista cambia (~10 Hz), no en cada recomposición por moverse el jugador.
-    val lastWebNpcHolder = remember { arrayOfNulls<List<ovh.gabrielhuav.pow.domain.models.Npc>>(1) }
+    val lastWebNpcHolder = remember { arrayOfNulls<List<ovh.gabrielhuav.pow.domain.models.map.Npc>>(1) }
     // OPT FPS web (ahora proveedor por defecto): la lista de landmarks solo cambia al
     // editarlos/cargarlos, pero su JSON se serializaba y enviaba al WebView en CADA frame.
     // Guardamos la última referencia para reenviar updateLandmarks solo cuando cambie.
-    val lastWebLandmarkHolder = remember { arrayOfNulls<List<ovh.gabrielhuav.pow.domain.models.Landmark>>(1) }
+    val lastWebLandmarkHolder = remember { arrayOfNulls<List<ovh.gabrielhuav.pow.domain.models.map.Landmark>>(1) }
     // Heartbeat: re-enviar landmarks al WebView cada ~45 frames por si el primer envío
     // (al cambiar la lista) llegó antes de que el HTML definiera updateLandmarks.
     val webLmTick = remember { intArrayOf(0) }
@@ -374,19 +412,22 @@ fun WorldMapScreen(
     val lastWebPoliceHolder = remember { booleanArrayOf(false) }
     val lastWebZombieHolder = remember { booleanArrayOf(false) }
     // 🚇 Estaciones de metro (estáticas): se reenvían al WebView solo al cambiar la lista
-    // (+ heartbeat), como los landmarks. El icono se carga del asset metro_cdmx/icon.webp.
-    val lastWebMetroHolder = remember { arrayOfNulls<List<ovh.gabrielhuav.pow.domain.models.MetroStation>>(1) }
+    // (+ heartbeat), como los landmarks. El icono se carga del asset TRANSIT/METRO/icon.webp.
+    val lastWebMetroHolder = remember { arrayOfNulls<List<ovh.gabrielhuav.pow.domain.models.map.MetroStation>>(1) }
     val webMetroTick = remember { intArrayOf(0) }
     // Debug Interiores (web): solo reenviamos el navGraph al WebView cuando cambia el
     // estado del overlay o la lista de landmarks (no por frame).
     val lastWebIpOn = remember { booleanArrayOf(false) }
-    val lastWebIpLm = remember { arrayOfNulls<List<ovh.gabrielhuav.pow.domain.models.Landmark>>(1) }
-    val lastWebIpColl = remember { arrayOfNulls<ovh.gabrielhuav.pow.domain.models.ExteriorCollisionsConfig>(1) }
+    val lastWebIpLm = remember { arrayOfNulls<List<ovh.gabrielhuav.pow.domain.models.map.Landmark>>(1) }
+    val lastWebIpColl = remember { arrayOfNulls<ovh.gabrielhuav.pow.domain.models.map.ExteriorCollisionsConfig>(1) }
     val nativeMapRef = remember { mutableStateOf<MapView?>(null) }
 
     // ─── ESTADO DEL MENÚ DE OPCIONES (con submenús anidados) ──────────────────
     var optionsExpanded by remember { mutableStateOf(false) }
     var optionsOpenGroup by remember { mutableStateOf<String?>(null) }
+    // NOTA: el menú de Opciones in-game NO cambia la orientación (el juego va SIEMPRE en
+    // horizontal). Solo los menús de RUTA (Ajustes, etc.) permiten rotar — lo gestiona
+    // MainActivity por destino de navegación. Ver 09.
 
     LaunchedEffect(uiState.isUserPanningMap) {
         if (!uiState.isUserPanningMap) {
@@ -411,41 +452,79 @@ fun WorldMapScreen(
                 viewModel.prepareMapForEntry()
             }
         }
-        // worldReady ahora TAMBIÉN espera a los NPCs (npcsWarmedUp): tras un teleport la
-        // pantalla de carga no se quita hasta que tiles + calles + IA estén listos.
-        val worldReady = !uiState.isLoadingLocation && uiState.isRoadNetworkReady &&
-            uiState.isMapReady && uiState.npcsWarmedUp
-        if (!worldReady) {
-            // PRE-DECODIFICACIÓN de assets de construcciones cercanas (≤ ~2 km) DURANTE la
-            // pantalla de carga: al soltar al jugador, los landmarks (p. ej. ESCOM) ya están
-            // en la caché de bitmaps y aparecen al instante en los renderers nativos.
-            LaunchedEffect(uiState.isMapReady, uiState.isRoadNetworkReady, uiState.landmarks) {
-                val loc = uiState.currentLocation ?: return@LaunchedEffect
-                val nearby = uiState.landmarks.filter {
-                    kotlin.math.abs(it.location.latitude - loc.latitude) < 0.02 &&
-                        kotlin.math.abs(it.location.longitude - loc.longitude) < 0.02
-                }
-                for (lm in nearby) {
-                    if (landmarkBitmapCache.containsKey(lm.assetPath)) continue
-                    val bmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        try {
-                            context.assets.open(lm.assetPath).use { st ->
-                                val o = android.graphics.BitmapFactory.Options().apply { inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888 }
-                                android.graphics.BitmapFactory.decodeStream(st, null, o)
-                            }
-                        } catch (e: Exception) { null }
+        // El mundo NO se revela hasta que la ESCENA esté REALMENTE lista: tiles + calles + el/los
+        // landmark(s) cercano(s) DECODIFICADO(S) (p. ej. la ENTRADA de la ESCOM) + NPCs/coches ya
+        // sembrados. Así la pantalla de carga dura lo necesario (más en gama baja) y no se entra
+        // "en blanco" ni sin coches/NPCs.
+        var sceneReady by remember { mutableStateOf(false) }
+        // Reinicia el gate en cada (re)carga del mundo (teleport, volver de interior).
+        LaunchedEffect(uiState.isMapReady) { if (!uiState.isMapReady) sceneReady = false }
+        // SONDEO: con tiles+calles listos, decodifica los assets de landmarks cercanos y espera a
+        // que (1) exista al menos un landmark cercano y TODOS estén decodificados, y (2) ya haya
+        // NPCs/coches sembrados. Timeout de seguridad de 15 s para no atascar JAMÁS la carga.
+        LaunchedEffect(uiState.isMapReady, uiState.isRoadNetworkReady) {
+            if (!uiState.isMapReady || !uiState.isRoadNetworkReady) return@LaunchedEffect
+            val start = System.currentTimeMillis()
+            var lastLog = 0L
+            while (isActive) {
+                val loc = uiState.currentLocation
+                if (loc != null) {
+                    val nearby = uiState.landmarks.filter {
+                        kotlin.math.abs(it.location.latitude - loc.latitude) < 0.02 &&
+                            kotlin.math.abs(it.location.longitude - loc.longitude) < 0.02
                     }
-                    landmarkBitmapCache[lm.assetPath] = bmp // escrito en Main (post-withContext)
+                    // Decodifica (una vez) los assets de landmarks que falten en la caché.
+                    for (lm in nearby) {
+                        if (landmarkBitmapCache.containsKey(lm.assetPath)) continue
+                        val bmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            try {
+                                context.assets.open(lm.assetPath).use { st ->
+                                    val o = android.graphics.BitmapFactory.Options().apply { inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888 }
+                                    android.graphics.BitmapFactory.decodeStream(st, null, o)
+                                }
+                            } catch (e: Exception) { null }
+                        }
+                        landmarkBitmapCache[lm.assetPath] = bmp
+                    }
+                    // (1) Hay landmark cercano y TODOS decodificados (intentados). (2) Ya hay NPCs/coches.
+                    val landmarksOk = nearby.isNotEmpty() &&
+                        nearby.all { landmarkBitmapCache.containsKey(it.assetPath) }
+                    val npcsOk = uiState.npcs.isNotEmpty()
+                    // DIAGNÓSTICO (POW_DBG, cada ~1 s): qué está pendiente para soltar la carga.
+                    val nowLog = System.currentTimeMillis()
+                    if (nowLog - lastLog > 1000L) {
+                        lastLog = nowLog
+                        android.util.Log.d("POW_DBG",
+                            "gate: nearbyLm=${nearby.size} lmDecoded=${nearby.count { landmarkBitmapCache.containsKey(it.assetPath) }} " +
+                            "npcs=${uiState.npcs.size} mapReady=${uiState.isMapReady} roadsReady=${uiState.isRoadNetworkReady} " +
+                            "t=${(nowLog - start) / 1000}s")
+                    }
+                    if (landmarksOk && npcsOk) {
+                        android.util.Log.d("POW_DBG", "gate: LISTO (landmarks+NPCs) en ${(System.currentTimeMillis() - start) / 1000}s")
+                        sceneReady = true; break
+                    }
                 }
+                // Timeout de seguridad: nunca dejar al jugador atrapado en la carga. Generoso (30 s)
+                // para gama baja: que dé tiempo a sembrar NPCs/coches y decodificar landmarks.
+                if (System.currentTimeMillis() - start > 30000L) {
+                    android.util.Log.w("POW_DBG", "gate: TIMEOUT 30s — se entra aunque falten assets (npcs=${uiState.npcs.size})")
+                    sceneReady = true; break
+                }
+                kotlinx.coroutines.delay(200)
             }
+        }
+        val worldReady = !uiState.isLoadingLocation && uiState.isRoadNetworkReady &&
+            uiState.isMapReady && uiState.npcsWarmedUp && sceneReady
+        if (!worldReady) {
             val tipTeleport = androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_tip_teleport)
             val tipDesigner = androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_tip_designer)
             val tipWanted = androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_tip_wanted)
             val tipShine = androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_tip_shine)
-            
+            val tipCarjack = androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_tip_carjack)
+
             val tips = listOf(
                 tipTeleport,
-                "Presiona Y cerca de un auto para robarlo.",
+                tipCarjack,
                 tipDesigner,
                 tipWanted,
                 tipShine
@@ -527,938 +606,45 @@ fun WorldMapScreen(
                 )
             }
             MapProvider.GOOGLE_MAPS_NATIVE -> {
-                val escom = LatLng(19.505411765791404, -99.14526888961194)
-                val cameraPositionState = rememberCameraPositionState {
-                    position = CameraPosition.fromLatLngZoom(escom, 18f)
-                }
-
-                LaunchedEffect(uiState.currentLocation, uiState.isDriving, uiState.zoomLevel) {
-                    if (!uiState.isUserPanningMap) {
-                        val targetLat = uiState.currentLocation?.latitude ?: escom.latitude
-                        val targetLng = uiState.currentLocation?.longitude ?: escom.longitude
-                        val targetZoom = uiState.zoomLevel.toFloat()
-                        val targetBearing = if (uiState.isDriving) uiState.vehicleRotation else 0f
-
-                        val newPosition = CameraPosition.builder()
-                            .target(LatLng(targetLat, targetLng))
-                            .zoom(targetZoom)
-                            .bearing(targetBearing)
-                            .tilt(0f)
-                            .build()
-
-                        // OPT FPS Google nativo: la posición del jugador cambia ~30 Hz; animar
-                        // (120 ms) en CADA cambio encadenaba animaciones que se cancelaban entre
-                        // sí (thrash de la cámara). move() reposiciona al instante: igual de fluido
-                        // (las posiciones ya llegan a 30 Hz) y mucho más barato.
-                        cameraPositionState.move(com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(newPosition))
-                    }
-                }
-
-                // Canal de retorno del zoom por gesto (pinch) en Google native: solo cuando
-                // el movimiento de cámara lo inició el USUARIO, propagamos el nuevo zoom al
-                // estado para que no rebote al seguir al jugador. Los movimientos
-                // programáticos (seguimiento/zoom por botón) se ignoran.
-                LaunchedEffect(cameraPositionState) {
-                    snapshotFlow { cameraPositionState.position.zoom }
-                        .collect { z ->
-                            if (cameraPositionState.cameraMoveStartedReason ==
-                                com.google.maps.android.compose.CameraMoveStartedReason.GESTURE) {
-                                viewModel.onMapZoomChanged(z.toDouble())
-                            }
-                        }
-                }
-
-                val propiedadesMap = remember {
-                    try {
-                        MapProperties(
-                            mapStyleOptions = MapStyleOptions.loadRawResourceStyle(context, ovh.gabrielhuav.pow.R.raw.estilo_google_maps)
-                        )
-                    } catch (e: Exception) {
-                        MapProperties()
-                    }
-                }
-
-                GoogleMap(
-                    modifier = Modifier.fillMaxSize(),
-                    cameraPositionState = cameraPositionState,
-                    properties = propiedadesMap,
-                    uiSettings = MapUiSettings(
-                        zoomGesturesEnabled = true,   // pinch (dos dedos) para zoom, igual que web/OSM
-                        zoomControlsEnabled = false,
-                        scrollGesturesEnabled = uiState.isDesignerMode || uiState.isUserPanningMap,
-                        tiltGesturesEnabled = false,
-                        rotationGesturesEnabled = false
-                    )
-                ) {
-                    uiState.landmarks.forEach { landmark ->
-                        key(landmark.id) {
-                            val bitmap = landmarkBitmapCache.getOrPut(landmark.assetPath) {
-                                try {
-                                    context.assets.open(landmark.assetPath).use { inputStream ->
-                                        val o = android.graphics.BitmapFactory.Options().apply { inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888 }; android.graphics.BitmapFactory.decodeStream(inputStream, null, o)
-                                    }
-                                } catch (e: Exception) { null }
-                            }
-
-                            if (bitmap != null) {
-                                val center = LatLng(landmark.location.latitude, landmark.location.longitude)
-                                val widthMeters = (landmark.baseWidthMeters * landmark.scaleX).toFloat()
-                                val heightMeters = (landmark.baseHeightMeters * landmark.scaleY).toFloat()
-
-                                val isDoorGM = landmark.assetPath.contains("DOORS/")
-                                var doorAnimDescriptor by remember(landmark.id) {
-                                    mutableStateOf<com.google.android.gms.maps.model.BitmapDescriptor?>(null)
-                                }
-                                if (isDoorGM) {
-                                    LaunchedEffect(landmark.id) {
-                                        while (true) {
-                                            doorAnimDescriptor = BitmapDescriptorFactory.fromBitmap(
-                                                // Assuming buildDoorEffectBitmap exists in your project.
-                                                // Used fallback icon if undefined, but matching original code structure.
-                                                bitmap
-                                            )
-                                            delay(80L)
-                                        }
-                                    }
-                                }
-                                val descriptor = if (isDoorGM) {
-                                    doorAnimDescriptor ?: googleMapsIconCache.getOrPut("LANDMARK_${landmark.assetPath}") {
-                                        BitmapDescriptorFactory.fromBitmap(bitmap)
-                                    }
-                                } else {
-                                    googleMapsIconCache.getOrPut("LANDMARK_${landmark.assetPath}") {
-                                        BitmapDescriptorFactory.fromBitmap(bitmap)
-                                    }
-                                }
-
-                                GroundOverlay(
-                                    position = GroundOverlayPosition.create(center, widthMeters, heightMeters),
-                                    image = descriptor,
-                                    bearing = landmark.rotationAngle,
-                                    transparency = 0f,
-                                    zIndex = if (landmark.assetPath.contains("DOORS/")) 10f else 0f
-                                )
-
-                                if (uiState.isDesignerMode) {
-                                    val markerState = remember(landmark.id) { MarkerState(position = center) }
-                                    markerState.position = center
-                                    val pencilIcon = remember(uiState.selectedLandmarkId == landmark.id) {
-                                        val drawable = ContextCompat.getDrawable(context, android.R.drawable.ic_menu_edit)?.mutate()
-                                        if (uiState.selectedLandmarkId == landmark.id) drawable?.setTint(android.graphics.Color.RED)
-                                        val bm = android.graphics.Bitmap.createBitmap(drawable!!.intrinsicWidth, drawable.intrinsicHeight, android.graphics.Bitmap.Config.ARGB_8888)
-                                        val canvas = android.graphics.Canvas(bm)
-                                        drawable.setBounds(0, 0, bm.width, bm.height)
-                                        drawable.draw(canvas)
-                                        BitmapDescriptorFactory.fromBitmap(bm)
-                                    }
-                                    com.google.maps.android.compose.Marker(
-                                        state = markerState,
-                                        draggable = true,
-                                        icon = pencilIcon,
-                                        onClick = { viewModel.selectLandmark(landmark.id); true }
-                                    )
-                                    LaunchedEffect(markerState.position) {
-                                        if (markerState.dragState == com.google.maps.android.compose.DragState.DRAG) {
-                                            viewModel.moveSelectedLandmark(markerState.position.latitude - landmark.location.latitude, markerState.position.longitude - landmark.location.longitude)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    // 🚇 ESTACIONES DE METRO: icono de la red CDMX en cada estación (paridad con
-                    // OSM nativo / web). Marcador estático de tamaño fijo (~24 dp).
-                    val metroIconG = remember {
-                        try {
-                            val raw = context.assets.open("metro_cdmx/icon.webp").use { android.graphics.BitmapFactory.decodeStream(it) }
-                            val px = (24 * context.resources.displayMetrics.density).toInt().coerceAtLeast(16)
-                            val scaled = android.graphics.Bitmap.createScaledBitmap(raw, px, px, true)
-                            BitmapDescriptorFactory.fromBitmap(scaled)
-                        } catch (e: Exception) { BitmapDescriptorFactory.defaultMarker() }
-                    }
-                    uiState.metroStations.forEach { station ->
-                        key("metro_${station.name}") {
-                            val mPos = LatLng(station.location.latitude, station.location.longitude)
-                            val mState = remember { MarkerState(position = mPos) }
-                            mState.position = mPos
-                            com.google.maps.android.compose.Marker(
-                                state = mState,
-                                icon = metroIconG,
-                                anchor = androidx.compose.ui.geometry.Offset(0.5f, 0.5f),
-                                flat = true,
-                                title = station.name
-                            )
-                        }
-                    }
-
-                    // Mostrar calles solo si estamos cerca
-                    if (uiState.showRoadNetwork && uiState.zoomLevel >= 15.5) {
-                        roadNetwork.forEach { way ->
-                            key("road_${way.id}") {
-                                com.google.maps.android.compose.Polyline(
-                                    points = way.nodes.map { LatLng(it.lat, it.lon) },
-                                    color = if (way.isForCars) Color(0xFFFFD700) else Color(0xFF82C8FF),
-                                    width = if (way.isForCars) 8f else 5f,
-                                    zIndex = 1000f,
-                                    clickable = false
-                                )
-                            }
-                        }
-                    }
-
-                    if (uiState.zoomLevel >= 15.5) {
-                        val screenDensity = context.resources.displayMetrics.density
-                        val timeMs = System.currentTimeMillis()
-                        val currentZoom = uiState.zoomLevel
-                        val renderZoom = round(currentZoom * 2) / 2.0
-
-                        // Culling por neblina: solo se dibujan los NPC dentro del radio de visión (fijo en metros).
-                        val centerCull = uiState.currentLocation
-                        val cullRadiusM = centerCull?.let { npcVisionRadiusMeters() }
-
-                        uiState.npcs.forEach { npc ->
-                            if (cullRadiusM != null && centerCull != null &&
-                                !npcWithinRadius(npc.location.latitude, npc.location.longitude,
-                                    centerCull.latitude, centerCull.longitude, cullRadiusM)
-                            ) return@forEach
-                            key(npc.id) {
-                                val qHealth = npc.health.toInt()
-                                // "Optimizar para gama baja": TODOS los NPCs como emoji (sin sprites).
-                                val fullEmoji = if (uiState.npcFullEmoji) when (npc.type) {
-                                    NpcType.CAR, NpcType.POLICE_CAR -> "🚗"
-                                    ovh.gabrielhuav.pow.domain.models.NpcType.ZOMBIE -> "🧟"
-                                    NpcType.POLICE_COP -> "👮"
-                                    else -> "🧍"
-                                } else null
-                                val cacheKey = when {
-                                    fullEmoji != null -> "GM_FULL_EMOJI_$fullEmoji"
-                                    npc.visualConfig != null && npc.type != ovh.gabrielhuav.pow.domain.models.NpcType.ZOMBIE -> {
-                                        val currentlyMoving = npc.speed > 0 || npc.isMoving
-                                        val personSzDp = (24.0 + ((renderZoom - 18.0) * 8.0)).toFloat().coerceIn(16.0f, 40.0f)
-                                        val exactPixels = (personSzDp * screenDensity).toInt()
-                                        val frameIndex = CharacterSpriteManager.getFrameIndex(context, npc.visualConfig!!, currentlyMoving, timeMs) ?: 0
-                                        val config = npc.visualConfig!!
-                                        "GM_PED_${config.bodyFolder}_${config.hairId}_${config.hairColor.value}_${config.shirtColor.value}_${config.pantsColor.value}_${npc.facingRight}_${frameIndex}_${exactPixels}_H${qHealth}_D${npc.isDying}"
-                                    }
-                                    npc.type == NpcType.CAR && !npc.isPoliceSkin -> {
-                                        var angle = npc.rotationAngle % 360f
-                                        if (angle < 0) angle += 360f
-                                        val frameIndex = (angle / 7.5f).roundToInt() % 48
-                                        val dynamicScale = (1.4 * 2.0.pow(renderZoom - 19.0)).toFloat().coerceIn(0.2f, 1.4f)
-                                        "GM_CAR_${npc.carModel.name}_${npc.carColor}_${frameIndex}_${dynamicScale}_H${qHealth}_D${npc.isDying}"
-                                    }
-                                    npc.type == NpcType.POLICE_CAR || npc.isPoliceSkin -> {
-                                        var angle = npc.rotationAngle % 360f
-                                        if (angle < 0) angle += 360f
-                                        val frameIndex = (angle / 7.5f).roundToInt() % 48
-                                        val dynamicScale = (1.4 * 2.0.pow(renderZoom - 19.0)).toFloat().coerceIn(0.2f, 1.4f)
-                                        "GM_POLICE_${frameIndex}_${dynamicScale}_H${qHealth}_D${npc.isDying}"
-                                    }
-                                    npc.type == NpcType.POLICE_COP -> {
-                                        val isAttacking = npc.policeCanShoot && !npc.isMoving
-                                        val animFrame = if (isAttacking) 0 else ((timeMs / 150L) % 6).toInt()
-                                        "GM_COP_SPRITE_${isAttacking}_${animFrame}_${npc.facingRight}_H${qHealth}_D${npc.isDying}"
-                                    }
-                                    npc.type == ovh.gabrielhuav.pow.domain.models.NpcType.ZOMBIE -> {
-                                        val timeMs = System.currentTimeMillis()
-                                        val frameIndex = ((timeMs / 220L) % 9L).toInt()
-                                        val roleSizeMul = when (npc.zombieRole) {
-                                            ovh.gabrielhuav.pow.domain.models.ZombieRole.TANK -> 1.45f
-                                            ovh.gabrielhuav.pow.domain.models.ZombieRole.RUNNER -> 0.9f
-                                            else -> 1f
-                                        }
-                                        val personSzDp = (24.0 + ((renderZoom - 18.0) * 8.0)).toFloat().coerceIn(16.0f, 40.0f)
-                                        val exactPixels = (personSzDp * screenDensity * roleSizeMul).toInt()
-                                        "GM_ZOMBIE_${npc.zombieRole.name}_${npc.facingRight}_${frameIndex}_${exactPixels}_H${npc.health.toInt()}_M${npc.maxHealth.toInt()}_D${npc.isDying}"
-                                    }
-                                    else -> "GM_SVG_${npc.type.name}_H${qHealth}_D${npc.isDying}"
-                                }
-
-                                val iconDescriptor = googleMapsIconCache.getOrPut(cacheKey) {
-                                    val drawable = when {
-                                        fullEmoji != null -> {
-                                            val px = (18 * screenDensity).toInt()
-                                            emojiToDrawable(context, fullEmoji, px)
-                                        }
-                                        npc.visualConfig != null && npc.type != ovh.gabrielhuav.pow.domain.models.NpcType.ZOMBIE -> {
-                                            val currentlyMoving = npc.speed > 0 || npc.isMoving
-                                            val personSzDp = (24.0 + ((renderZoom - 18.0) * 8.0)).toFloat().coerceIn(16.0f, 40.0f)
-                                            val exactPixels = (personSzDp * screenDensity).toInt()
-                                            var d = CharacterSpriteManager.getModularNpcDrawable(context, npc.visualConfig!!, currentlyMoving, npc.facingRight, timeMs, screenDensity, npc.displayName)
-                                            d = drawHealthBarOnDrawable(context, d, npc.health, npc.isDying)
-                                            d?.let { ExactSizeDrawable(it, exactPixels, exactPixels) }
-                                        }
-                                        npc.type == NpcType.CAR && !npc.isPoliceSkin -> {
-                                            val dynamicScale = (1.4 * 2.0.pow(renderZoom - 19.0)).toFloat().coerceIn(0.2f, 1.4f)
-                                            var d = VehicleSpriteManager.getTintedCarNpc(context, npc.rotationAngle, npc.carColor, screenDensity, npc.carModel)
-                                            d = drawHealthBarOnDrawable(context, d, npc.health, npc.isDying)
-                                            d?.let {
-                                                val fw = ((it.intrinsicWidth / screenDensity) / screenDensity * dynamicScale * screenDensity).toInt()
-                                                val fh = ((it.intrinsicHeight / screenDensity) / screenDensity * dynamicScale * screenDensity).toInt()
-                                                ExactSizeDrawable(it, fw, fh)
-                                            }
-                                        }
-                                        npc.type == NpcType.POLICE_CAR || npc.isPoliceSkin -> {
-                                            val dynamicScale = (1.4 * 2.0.pow(renderZoom - 19.0)).toFloat().coerceIn(0.2f, 1.4f)
-                                            val d = ovh.gabrielhuav.pow.features.map_exterior.ui.components.PoliceSpriteManager.getPoliceCar(context, npc.rotationAngle, screenDensity)
-                                            d?.let {
-                                                val fw = ((it.intrinsicWidth / screenDensity) / screenDensity * dynamicScale * screenDensity).toInt()
-                                                val fh = ((it.intrinsicHeight / screenDensity) / screenDensity * dynamicScale * screenDensity).toInt()
-                                                val withHealth = drawHealthBarOnDrawable(context, it, npc.health, npc.isDying)
-                                                ExactSizeDrawable(withHealth ?: it, fw, fh)
-                                            }
-                                        }
-                                        npc.type == NpcType.POLICE_COP -> {
-                                            val isAttacking = npc.policeCanShoot && !npc.isMoving
-                                            val exactPixels = (18 * screenDensity).toInt()
-                                            var d = ovh.gabrielhuav.pow.features.map_exterior.ui.components.PoliceNpcSpriteManager.getDrawable(
-                                                context, isAttacking, timeMs, screenDensity, npc.facingRight
-                                            ) as android.graphics.drawable.Drawable?
-                                            if (d == null) {
-                                                d = emojiToDrawable(context, "👮", exactPixels)
-                                            }
-                                            d = drawHealthBarOnDrawable(context, d, npc.health, npc.isDying)
-                                            d
-                                        }
-                                        npc.type == ovh.gabrielhuav.pow.domain.models.NpcType.ZOMBIE -> {
-                                            val timeMs = System.currentTimeMillis()
-                                            var d: android.graphics.drawable.Drawable? = ovh.gabrielhuav.pow.features.map_exterior.ui.components.MapZombieSpriteManager.getZombieDrawable(
-                                                context = context,
-                                                npc = npc,
-                                                timeMs = timeMs,
-                                                scale = screenDensity
-                                            )
-                                            d = drawHealthBarOnDrawable(context, d, npc.health, npc.isDying, npc.maxHealth)
-                                            val roleSizeMul = when (npc.zombieRole) {
-                                                ovh.gabrielhuav.pow.domain.models.ZombieRole.TANK -> 1.45f
-                                                ovh.gabrielhuav.pow.domain.models.ZombieRole.RUNNER -> 0.9f
-                                                else -> 1f
-                                            }
-                                            val personSzDp = (24.0 + ((renderZoom - 18.0) * 8.0)).toFloat().coerceIn(16.0f, 40.0f)
-                                            val exactPixels = (personSzDp * screenDensity * roleSizeMul).toInt()
-                                            d?.let { ExactSizeDrawable(it, exactPixels, exactPixels) }
-                                        }
-                                        else -> {
-                                            val resId = context.resources.getIdentifier(npc.type.drawableName, "drawable", context.packageName)
-                                            var d = if (resId != 0) ContextCompat.getDrawable(context, resId) else null
-                                            d = drawHealthBarOnDrawable(context, d, npc.health, npc.isDying)
-                                            d?.let { ExactSizeDrawable(it, (24 * screenDensity).toInt(), (24 * screenDensity).toInt()) }
-                                        }
-                                    }
-                                    val bitmap = if (drawable != null) {
-                                        val bm = android.graphics.Bitmap.createBitmap(drawable.intrinsicWidth, drawable.intrinsicHeight, android.graphics.Bitmap.Config.ARGB_8888)
-                                        val canvas = android.graphics.Canvas(bm)
-                                        drawable.setBounds(0, 0, canvas.width, canvas.height)
-                                        drawable.draw(canvas)
-                                        bm
-                                    } else null
-                                    if (bitmap != null) BitmapDescriptorFactory.fromBitmap(bitmap) else BitmapDescriptorFactory.defaultMarker()
-                                }
-                                val position = LatLng(npc.location.latitude, npc.location.longitude)
-                                val markerState = remember { MarkerState(position = position) }
-                                markerState.position = position
-
-                                com.google.maps.android.compose.Marker(
-                                    state = markerState,
-                                    icon = iconDescriptor,
-                                    rotation = 0f,
-                                    anchor = androidx.compose.ui.geometry.Offset(0.5f, 0.5f),
-                                    flat = true,
-                                    alpha = if (npc.isDying) 0.5f else 1.0f
-                                )
-                            }
-                        }
-                    }
-
-                    // ─── WAYPOINTS DE ZOMBIS (fuera del fog, modo apocalipsis) ───
-                    // Paridad con OSM nativo/web: 🧟 + línea ROJA punteada jugador→zombi para
-                    // los zombis FUERA de tu campo de visión (Google Maps nativo).
-                    run {
-                        val plocG = uiState.currentLocation
-                        if (plocG != null && uiState.globalZombieMode) {
-                            val zombieWpIconG = remember {
-                                val px = (26 * context.resources.displayMetrics.density).toInt()
-                                val d = emojiToDrawable(context, "🧟", px)
-                                val bm = android.graphics.Bitmap.createBitmap(
-                                    d.intrinsicWidth.coerceAtLeast(1), d.intrinsicHeight.coerceAtLeast(1),
-                                    android.graphics.Bitmap.Config.ARGB_8888
-                                )
-                                val c = android.graphics.Canvas(bm)
-                                d.setBounds(0, 0, bm.width, bm.height); d.draw(c)
-                                BitmapDescriptorFactory.fromBitmap(bm)
-                            }
-                            uiState.npcs.forEach { npc ->
-                                if (npc.type != NpcType.ZOMBIE || npc.health <= 0f) return@forEach
-                                if (npcWithinRadius(npc.location.latitude, npc.location.longitude,
-                                        plocG.latitude, plocG.longitude, NPC_FOG_VISION_METERS)) return@forEach
-                                key("zwp_${npc.id}") {
-                                    val zPos = LatLng(npc.location.latitude, npc.location.longitude)
-                                    val zSt = remember { MarkerState(position = zPos) }
-                                    zSt.position = zPos
-                                    com.google.maps.android.compose.Marker(
-                                        state = zSt, icon = zombieWpIconG,
-                                        anchor = androidx.compose.ui.geometry.Offset(0.5f, 0.5f),
-                                        flat = true, zIndex = 800f
-                                    )
-                                    com.google.maps.android.compose.Polyline(
-                                        points = listOf(LatLng(plocG.latitude, plocG.longitude), zPos),
-                                        color = Color(0xFFE53935), width = 6f, zIndex = 1200f, clickable = false,
-                                        pattern = listOf(
-                                            com.google.android.gms.maps.model.Dash(30f),
-                                            com.google.android.gms.maps.model.Gap(20f)
-                                        )
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    if (uiState.zoomLevel >= 16.0) {
-                        allCollectibles.forEach { collectible ->
-                            key(collectible.id) {
-                                val screenDensity = context.resources.displayMetrics.density
-                                val exactPixels = (22 * screenDensity).toInt()
-                                val cacheKey = "GM_COL_${collectible.assetPath}"
-
-                                val iconDescriptor = googleMapsIconCache.getOrPut(cacheKey) {
-                                    try {
-                                        val bitmap = context.assets.open(collectible.assetPath).use {
-                                            android.graphics.BitmapFactory.decodeStream(it)
-                                        }
-                                        if (bitmap != null) {
-                                            val glowDrawable = android.graphics.drawable.GradientDrawable().apply {
-                                                shape = android.graphics.drawable.GradientDrawable.OVAL
-                                                setSize(exactPixels, exactPixels)
-                                                setColor(android.graphics.Color.argb(100, 255, 235, 59))
-                                            }
-                                            val spriteDrawable = android.graphics.drawable.BitmapDrawable(context.resources, bitmap)
-                                            val spriteSize = (exactPixels * 0.90).toInt()
-                                            val layerDrawable = android.graphics.drawable.LayerDrawable(arrayOf(glowDrawable, spriteDrawable))
-                                            val inset = ((exactPixels - spriteSize) / 2)
-                                            layerDrawable.setLayerInset(1, inset, inset, inset, inset)
-                                            val finalBm = android.graphics.Bitmap.createBitmap(exactPixels, exactPixels, android.graphics.Bitmap.Config.ARGB_8888)
-                                            val canvas = android.graphics.Canvas(finalBm)
-                                            layerDrawable.setBounds(0, 0, exactPixels, exactPixels)
-                                            layerDrawable.draw(canvas)
-                                            BitmapDescriptorFactory.fromBitmap(finalBm)
-                                        } else BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_YELLOW)
-                                    } catch (e: Exception) { BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_YELLOW) }
-                                }
-                                val position = LatLng(collectible.latitude, collectible.longitude)
-                                val markerState = remember { MarkerState(position = position) }
-                                markerState.position = position
-                                val isHand = collectible.name == "Objeto Misterioso ESCOM" || collectible.id == "global_zombie_hand"
-
-                                com.google.maps.android.compose.Marker(
-                                    state = markerState,
-                                    icon = iconDescriptor,
-                                    anchor = androidx.compose.ui.geometry.Offset(0.5f, 0.5f),
-                                    flat = true,
-                                    rotation = if (isHand) 0f else ((System.currentTimeMillis() / 30) % 360).toFloat()
-                                )
-                            }
-                        }
-                    }
-                }
+                // REFACTOR: rama Google extraída a WorldMapScreenGoogle.kt (mismo paquete) para
+                // reducir el tamaño de este composable. Las cachés locales se pasan por parámetro.
+                GoogleMapLayer(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    context = context,
+                    roadNetwork = roadNetwork,
+                    allCollectibles = allCollectibles,
+                    landmarkBitmapCache = landmarkBitmapCache,
+                    googleMapsIconCache = googleMapsIconCache,
+                )
             }
             else -> {
-                val collectiblesJson = remember(allCollectibles) { gson.toJson(allCollectibles) }
-                AndroidView(
-                    factory = { ctx ->
-                        WebView(ctx).apply {
-                            layoutParams = android.view.ViewGroup.LayoutParams(
-                                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                                android.view.ViewGroup.LayoutParams.MATCH_PARENT
-                            )
-                            setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
-
-                            settings.javaScriptEnabled = true
-                            settings.domStorageEnabled = true
-                            settings.allowFileAccess = true
-                            settings.allowFileAccessFromFileURLs = true
-                            settings.allowUniversalAccessFromFileURLs = true
-                            settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
-
-                            webViewClient = cachingClient
-                            addJavascriptInterface(MapJsBridge(viewModel), "Android")
-                            val lat = uiState.currentLocation?.latitude ?: 0.0
-                            val lng = uiState.currentLocation?.longitude ?: 0.0
-
-                            loadDataWithBaseURL("file:///android_asset/", buildHtml(lat, lng, uiState.zoomLevel.toInt()), "text/html", "UTF-8", null)
-                            webViewRef.value = this
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                    update = { wv ->
-                        webViewRef.value = wv
-                        val timeMs = System.currentTimeMillis()
-                        if (!uiState.isUserPanningMap) {
-                            // Zoom SIN truncar (.toInt() peleaba con syncZoom cuando el estado
-                            // queda en medios pasos tras un pinch, p. ej. 21.5 vs 21).
-                            uiState.currentLocation?.let { wv.evaluateJavascript("if(typeof updateMapView==='function')updateMapView(${it.latitude}, ${it.longitude}, ${uiState.zoomLevel});", null) }
-                        }
-                        uiState.currentLocation?.let { wv.evaluateJavascript("if(typeof updatePlayerMarker==='function')updatePlayerMarker(${it.latitude}, ${it.longitude}, ${uiState.isUserPanningMap});", null) }
-                        // Zoom automático por estado: sync explícito e incondicional (el JS
-                        // decide si aplica; respeta el pinch reciente del usuario).
-                        wv.evaluateJavascript("if(typeof syncZoom==='function')syncZoom(${uiState.zoomLevel});", null)
-                        // Neblina anclada al jugador (se redibuja también en cada gesto vía JS).
-                        uiState.currentLocation?.let { wv.evaluateJavascript("if(typeof setPlayerFog==='function')setPlayerFog(${it.latitude}, ${it.longitude});", null) }
-                        wv.evaluateJavascript("if(typeof setDesignerMode==='function')setDesignerMode(${uiState.isDesignerMode});", null)
-                        // Lápiz seleccionado (Modo Diseñador web): tinta el ✏️ del landmark activo.
-                        val selLmJs = uiState.selectedLandmarkId?.let { "'$it'" } ?: "null"
-                        wv.evaluateJavascript("if(typeof setSelectedLandmark==='function')setSelectedLandmark($selLmJs);", null)
-                        // OPT FPS web: el contenedor solo se agranda (para rotación) al CONDUCIR; a
-                        // pie es del tamaño de la pantalla. El JS ignora llamadas repetidas (guard
-                        // _driving), así que llamarlo cada frame es barato y robusto (se auto-corrige
-                        // aunque se pierda una transición a pie↔conducir).
-                        wv.evaluateJavascript("if(typeof setMapOversize==='function')setMapOversize(${uiState.isDriving});", null)
-                        val mapRot = if (uiState.isDriving) -uiState.vehicleRotation else 0f
-                        wv.evaluateJavascript("if(typeof setMapRotation==='function')setMapRotation(${mapRot});", null)
-                        val tileUrl = when (uiState.mapProvider) {
-                            MapProvider.CARTO_VOYAGER  -> "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-                            MapProvider.CARTO_DB_DARK  -> "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                            MapProvider.CARTO_DB_LIGHT -> "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-                            MapProvider.ESRI           -> "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
-                            MapProvider.ESRI_SATELLITE -> "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                            MapProvider.OPEN_TOPO      -> "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
-                            MapProvider.OSM_WEB        -> "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-                            else -> "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
-                        }
-                        // Zoom máximo REAL de cada proveedor: a partir de ahí Leaflet escala
-                        // (over-zoom). CARTO sirve z20 → más detalle de calles que OSM (z19).
-                        val tileMaxNative = when (uiState.mapProvider) {
-                            MapProvider.CARTO_VOYAGER, MapProvider.CARTO_DB_DARK,
-                            MapProvider.CARTO_DB_LIGHT -> 20
-                            MapProvider.OSM_WEB        -> 19
-                            MapProvider.ESRI, MapProvider.ESRI_SATELLITE -> 19
-                            MapProvider.OPEN_TOPO      -> 17
-                            else -> 20 // Google Web
-                        }
-                        wv.evaluateJavascript("if(typeof changeTileUrl==='function')changeTileUrl('$tileUrl', $tileMaxNative);", null)
-                        wv.evaluateJavascript("if(typeof setRoadNetworkReady==='function')setRoadNetworkReady(${uiState.isRoadNetworkReady});", null)
-
-                        val density = context.resources.displayMetrics.density
-                        val highResRenderScale = 1.0f * density
-
-                        // Culling por distancia: solo enviamos al WebView los NPC dentro del
-                        // viewport. Evita generar bitmaps/base64 y marcadores JS para NPC lejanos.
-                        // OPT: solo cuando la lista de NPCs cambió (no en cada recomposición).
-                        if (uiState.npcs !== lastWebNpcHolder[0]) {
-                          lastWebNpcHolder[0] = uiState.npcs
-                        val centerCullW = uiState.currentLocation
-                        val cullRadiusMW = centerCullW?.let { npcVisionRadiusMeters() }
-                        val visibleNpcs = if (cullRadiusMW != null && centerCullW != null) {
-                            uiState.npcs.filter {
-                                npcWithinRadius(it.location.latitude, it.location.longitude,
-                                    centerCullW.latitude, centerCullW.longitude, cullRadiusMW)
-                            }
-                        } else uiState.npcs
-
-                        val npcPayloads = visibleNpcs.map { npc ->
-                            if (uiState.npcFullEmoji) {
-                                // "Optimizar para gama baja": TODOS los NPCs como emoji. No se genera
-                                // ningún sprite/bitmap de personaje: solo un bitmap por emoji (cacheado).
-                                val emoji = when (npc.type) {
-                                    NpcType.CAR, NpcType.POLICE_CAR -> "🚗"
-                                    NpcType.ZOMBIE -> "🧟"
-                                    NpcType.POLICE_COP -> "👮"
-                                    else -> "🧍"
-                                }
-                                val cacheKey = "full_emoji_${emoji}_${density}"
-                                val base64Image = base64Cache[cacheKey]
-                                if (base64Image == null) {
-                                    base64Cache[cacheKey] = ""
-                                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.Default) {
-                                        val px = (96 * density).toInt().coerceAtLeast(48)
-                                        val bitmap = (emojiToDrawable(context, emoji, px) as? android.graphics.drawable.BitmapDrawable)?.bitmap
-                                        if (bitmap != null) {
-                                            val out = java.io.ByteArrayOutputStream()
-                                            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
-                                            val b64 = "data:image/png;base64," + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
-                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                                base64Cache[cacheKey] = b64
-                                            }
-                                        }
-                                    }
-                                }
-                                if (!base64Image.isNullOrEmpty() && !registeredWebImages.contains(cacheKey)) {
-                                    wv.evaluateJavascript("if(!window.imgCache) window.imgCache={}; window.imgCache['$cacheKey'] = '$base64Image';", null)
-                                    registeredWebImages.add(cacheKey)
-                                }
-                                val isCarType = npc.type == NpcType.CAR || npc.type == NpcType.POLICE_CAR
-                                val webHp = if (npc.maxHealth > 0f) (npc.health / npc.maxHealth * 100f) else npc.health
-                                NpcWebPayload(
-                                    npc.id, npc.location.latitude, npc.location.longitude, 0f,
-                                    if (isCarType) "CAR" else "MODULAR", cacheKey, null, 1, npc.displayName,
-                                    if (isCarType) 1f else null, if (isCarType) 1f else null,
-                                    health = webHp, isDying = npc.isDying
-                                )
-                            } else if (npc.type == NpcType.CAR || npc.type == NpcType.POLICE_CAR) {
-                                // FIX web: la PATRULLA (POLICE_CAR) caía al `else` y se dibujaba con
-                                // su SVG genérico en vez del asset real. Ahora la tratamos como un
-                                // coche-imagen: generamos su sprite (PoliceSpriteManager, sin tintar),
-                                // lo registramos en imgCache y lo enviamos como tipo "CAR".
-                                val isPolice = npc.type == NpcType.POLICE_CAR || npc.isPoliceSkin
-                                var angle = npc.rotationAngle % 360f
-                                if (angle < 0) angle += 360f
-                                val frameIndex = (angle / 7.5f).roundToInt() % 48
-                                val cacheKey = if (isPolice) "POLICE_${frameIndex}_${density}"
-                                               else "${npc.carModel.name}_${frameIndex}_${npc.carColor}_${density}"
-                                val base64Image = base64Cache[cacheKey]
-                                if (base64Image == null) {
-                                    base64Cache[cacheKey] = ""
-                                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.Default) {
-                                        val drawable = if (isPolice)
-                                            ovh.gabrielhuav.pow.features.map_exterior.ui.components.PoliceSpriteManager.getPoliceCar(context, angle, highResRenderScale)
-                                        else
-                                            VehicleSpriteManager.getTintedCarNpc(context, angle, npc.carColor, highResRenderScale, npc.carModel)
-                                        val bitmap = (drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
-                                        if (bitmap != null) {
-                                            val w = (bitmap.width / density) / density
-                                            val h = (bitmap.height / density) / density
-                                            val out = java.io.ByteArrayOutputStream()
-                                            bitmap.compress(android.graphics.Bitmap.CompressFormat.WEBP, 100, out)
-                                            val b64 = "data:image/webp;base64," + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
-
-                                            // IMPORTANTE: Actualizar el estado en el hilo principal dispara la recomposición
-                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                                widthCache[cacheKey] = w
-                                                heightCache[cacheKey] = h
-                                                base64Cache[cacheKey] = b64
-                                            }
-                                        }
-                                    }
-                                }
-                                if (!base64Image.isNullOrEmpty() && !registeredWebImages.contains(cacheKey)) {
-                                    wv.evaluateJavascript("if(!window.imgCache) window.imgCache={}; window.imgCache['$cacheKey'] = '$base64Image';", null)
-                                    registeredWebImages.add(cacheKey)
-                                }
-                                NpcWebPayload(npc.id, npc.location.latitude, npc.location.longitude, npc.rotationAngle, "CAR", cacheKey, null, null, npc.displayName, widthCache[cacheKey], heightCache[cacheKey], health = npc.health, isDying = npc.isDying)
-                            } else if (npc.visualConfig != null && npc.type != ovh.gabrielhuav.pow.domain.models.NpcType.ZOMBIE) {
-                                val currentlyMoving = npc.speed > 0 || npc.isMoving
-                                val config = npc.visualConfig!!
-                                val frameIndex = CharacterSpriteManager.getFrameIndex(context, config, currentlyMoving, timeMs) ?: 0
-                                val cacheKey = "npc_mod_${config.bodyFolder}_${config.hairId}_${npc.facingRight}_${frameIndex}_${density}"
-                                val base64Image = base64Cache[cacheKey]
-                                if (base64Image == null) {
-                                    base64Cache[cacheKey] = ""
-                                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.Default) {
-                                        val bitmap = CharacterSpriteManager.generateAssembledBitmap(context, config, currentlyMoving, timeMs)
-                                        if (bitmap != null) {
-                                            val out = java.io.ByteArrayOutputStream()
-                                            bitmap.compress(android.graphics.Bitmap.CompressFormat.WEBP, 90, out)
-                                            base64Cache[cacheKey] = "data:image/webp;base64," + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
-                                        }
-                                    }
-                                }
-                                if (!base64Image.isNullOrEmpty() && !registeredWebImages.contains(cacheKey)) {
-                                    wv.evaluateJavascript("if(!window.imgCache) window.imgCache={}; window.imgCache['$cacheKey'] = '$base64Image';", null)
-                                    registeredWebImages.add(cacheKey)
-                                }
-                                NpcWebPayload(npc.id, npc.location.latitude, npc.location.longitude, 0f, "MODULAR", cacheKey, null, if (npc.facingRight) 1 else -1, npc.displayName, health = npc.health, isDying = npc.isDying)
-                            } else if (npc.type == ovh.gabrielhuav.pow.domain.models.NpcType.ZOMBIE) {
-                                // FIX web: el frame DEBE acotarse a los 9 del walk (% 9), igual que
-                                // getZombieDrawable. Antes era (timeMs/220).toInt() (entero creciente),
-                                // así que cada frame creaba un cacheKey nuevo cuya imagen base64 (async)
-                                // nunca llegaba a registrarse a tiempo → el zombi no se veía en web.
-                                val frameIndex = ((timeMs / 220L) % 9L).toInt()
-                                // El rol entra en la clave para que cada tinte (palette swap) se cachee aparte.
-                                val cacheKey = "ZOMBIE_WEB_${npc.zombieRole.name}_${npc.facingRight}_${frameIndex}_D${npc.isDying}"
-                                val base64Image = base64Cache[cacheKey]
-                                if (base64Image == null) {
-                                    base64Cache[cacheKey] = ""
-                                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.Default) {
-                                        val drawable = ovh.gabrielhuav.pow.features.map_exterior.ui.components.MapZombieSpriteManager.getZombieDrawable(
-                                            context = context,
-                                            npc = npc,
-                                            timeMs = timeMs,
-                                            scale = highResRenderScale
-                                        )
-                                        val bitmap = drawable?.bitmap
-                                        if (bitmap != null) {
-                                            val out = java.io.ByteArrayOutputStream()
-                                            bitmap.compress(android.graphics.Bitmap.CompressFormat.WEBP, 90, out)
-                                            val b64 = "data:image/webp;base64," + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
-                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { base64Cache[cacheKey] = b64 }
-                                        }
-                                    }
-                                }
-                                if (!base64Image.isNullOrEmpty() && !registeredWebImages.contains(cacheKey)) {
-                                    wv.evaluateJavascript("if(!window.imgCache) window.imgCache={}; window.imgCache['$cacheKey'] = '$base64Image';", null)
-                                    registeredWebImages.add(cacheKey)
-                                }
-                                // Vida normalizada a 0-100 (el JS dibuja la barra asumiendo max 100):
-                                // así la barra del web es proporcional al maxHealth del rol.
-                                val webHp = if (npc.maxHealth > 0f) (npc.health / npc.maxHealth * 100f) else npc.health
-                                NpcWebPayload(npc.id, npc.location.latitude, npc.location.longitude, 0f, "MODULAR", cacheKey, null, 1, null, health = webHp, isDying = npc.isDying)
-                            } else if (npc.type == NpcType.POLICE_COP) {
-                                val isAttacking = npc.policeCanShoot && !npc.isMoving
-                                val animFrame = if (isAttacking) 0 else ((timeMs / 150L) % 6).toInt()
-                                val cacheKey = "cop_sprite_${isAttacking}_${animFrame}_${npc.facingRight}_${density}"
-                                val base64Image = base64Cache[cacheKey]
-                                if (base64Image == null) {
-                                    base64Cache[cacheKey] = ""
-                                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.Default) {
-                                        val px = (96 * density).toInt().coerceAtLeast(48)
-                                        var bitmap = ovh.gabrielhuav.pow.features.map_exterior.ui.components.PoliceNpcSpriteManager.getDrawable(
-                                            context, isAttacking, timeMs, density, npc.facingRight
-                                        )?.bitmap
-                                        if (bitmap == null) {
-                                            bitmap = (emojiToDrawable(context, "👮", px) as? android.graphics.drawable.BitmapDrawable)?.bitmap
-                                        }
-                                        if (bitmap != null) {
-                                            val out = java.io.ByteArrayOutputStream()
-                                            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
-                                            val b64 = "data:image/png;base64," + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
-                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                                base64Cache[cacheKey] = b64
-                                            }
-                                        }
-                                    }
-                                }
-                                if (!base64Image.isNullOrEmpty() && !registeredWebImages.contains(cacheKey)) {
-                                    wv.evaluateJavascript("if(!window.imgCache) window.imgCache={}; window.imgCache['$cacheKey'] = '$base64Image';", null)
-                                    registeredWebImages.add(cacheKey)
-                                }
-                                val webHp = if (npc.maxHealth > 0f) (npc.health / npc.maxHealth * 100f) else npc.health
-                                NpcWebPayload(npc.id, npc.location.latitude, npc.location.longitude, 0f, "MODULAR", cacheKey, null, 1, null, health = webHp, isDying = npc.isDying)
-                            } else {
-                                NpcWebPayload(npc.id, npc.location.latitude, npc.location.longitude, npc.rotationAngle, npc.type.name, null, npc.type.drawableName, null, npc.displayName, health = npc.health, isDying = npc.isDying)
-                            }
-                        }
-
-                        wv.evaluateJavascript("if(typeof updateNpcs==='function')updateNpcs(${gson.toJson(npcPayloads)});", null)
-                        } // fin guard web: lista de NPCs sin cambios → no se reenvía al WebView
-                        wv.evaluateJavascript("if(typeof updateCollectibles==='function')updateCollectibles(${JSONObject.quote(collectiblesJson)});", null)
-
-                        // OPT FPS web: serializar y reenviar landmarks SOLO cuando cambian
-                        // (+ heartbeat). Antes se hacía gson.toJson + evaluateJavascript en CADA
-                        // frame aunque los landmarks no cambian durante el juego.
-                        webLmTick[0]++
-                        if (uiState.landmarks !== lastWebLandmarkHolder[0] || webLmTick[0] % 45 == 0) {
-                        lastWebLandmarkHolder[0] = uiState.landmarks
-                        val landmarksPayload = uiState.landmarks.map {
-                            LandmarkWebPayload(
-                                id = it.id.toString(),
-                                lat = it.location.latitude,
-                                lng = it.location.longitude,
-                                rotation = it.rotationAngle,
-                                widthMeters = it.baseWidthMeters,
-                                heightMeters = it.baseHeightMeters,
-                                scale = it.scaleX,
-                                scaleX = it.scaleX,
-                                scaleY = it.scaleY,
-                                assetPath = it.assetPath
-                            )
-                        }
-                        val landmarksJson = gson.toJson(landmarksPayload)
-                        wv.evaluateJavascript("if(typeof updateLandmarks==='function')updateLandmarks(${JSONObject.quote(landmarksJson)});", null)
-                        } // fin guard landmarks web (solo se reenvían al cambiar / heartbeat)
-
-                        // 🚇 ESTACIONES DE METRO: icono fijo en cada estación. Estáticas, así que
-                        // solo se reenvían al cambiar la lista (+ heartbeat, por si el primer envío
-                        // llegó antes de que el HTML definiera updateMetro).
-                        webMetroTick[0]++
-                        if (uiState.metroStations !== lastWebMetroHolder[0] || webMetroTick[0] % 45 == 0) {
-                            lastWebMetroHolder[0] = uiState.metroStations
-                            val metroPayload = uiState.metroStations.map {
-                                mapOf("name" to it.name, "lat" to it.location.latitude, "lng" to it.location.longitude)
-                            }
-                            wv.evaluateJavascript("if(typeof updateMetro==='function')updateMetro(${JSONObject.quote(gson.toJson(metroPayload))});", null)
-                        }
-                        if (uiState.showRoadNetwork) {
-                            val roadsPayload = roadNetwork.map { way ->
-                                mapOf(
-                                    "id" to way.id.toString(),
-                                    "isForCars" to way.isForCars,
-                                    "nodes" to way.nodes.map { mapOf("lat" to it.lat, "lon" to it.lon) }
-                                )
-                            }
-                            val roadsJson = gson.toJson(roadsPayload)
-                            wv.evaluateJavascript("if(typeof updateRoads==='function')updateRoads(${JSONObject.quote(roadsJson)});", null)
-                        } else {
-                            wv.evaluateJavascript("if(typeof updateRoads==='function')updateRoads('[]');", null)
-                        }
-
-                        // 🔧 DEBUG INTERIORES (web): dibuja el navGraph de los landmarks (ESCOM)
-                        // para ver por dónde se puede caminar (verde) y por dónde van autos (naranja).
-                        // Convertimos localX/localY → global aquí (el Leaflet no tiene esa geometría).
-                        val ipOn = uiState.showInteriorDebugOverlay
-                        if (ipOn != lastWebIpOn[0] || (ipOn && (uiState.landmarks !== lastWebIpLm[0] || uiState.exteriorCollisions !== lastWebIpColl[0]))) {
-                            lastWebIpOn[0] = ipOn
-                            lastWebIpLm[0] = uiState.landmarks
-                            lastWebIpColl[0] = uiState.exteriorCollisions
-                            if (ipOn) {
-                                // Caminos del navGraph (verde/naranja).
-                                val paths = uiState.landmarks.flatMap { lm ->
-                                    val ng = lm.navGraph ?: return@flatMap emptyList<Map<String, Any>>()
-                                    ng.ways.filter { it.nodes.size >= 2 }.map { w ->
-                                        mapOf(
-                                            "id" to "${lm.id}_${w.id}",
-                                            "walk" to w.isForPeople,
-                                            "nodes" to w.nodes.map {
-                                                val g = lm.toGlobalGeoPoint(it.localX, it.localY)
-                                                mapOf("lat" to g.latitude, "lng" to g.longitude)
-                                            }
-                                        )
-                                    }
-                                }
-                                // Zonas NO caminables (polígonos rojos) + bardas (líneas rojas).
-                                val cfg = uiState.exteriorCollisions
-                                val blocks = cfg?.polygons?.filter { it.nodes.size >= 3 }?.mapIndexed { i, poly ->
-                                    mapOf("id" to "blk_$i", "nodes" to poly.nodes.map { mapOf("lat" to it.lat, "lng" to it.lon) })
-                                } ?: emptyList()
-                                val walls = cfg?.walls?.mapIndexed { i, wl ->
-                                    mapOf("id" to "wl_$i", "nodes" to listOf(
-                                        mapOf("lat" to wl.lat1, "lng" to wl.lon1),
-                                        mapOf("lat" to wl.lat2, "lng" to wl.lon2)
-                                    ))
-                                } ?: emptyList()
-                                val ipObj = mapOf("paths" to paths, "blocks" to blocks, "walls" to walls)
-                                wv.evaluateJavascript("if(typeof updateInteriorPaths==='function')updateInteriorPaths(${JSONObject.quote(gson.toJson(ipObj))});", null)
-                            } else {
-                                wv.evaluateJavascript("if(typeof updateInteriorPaths==='function')updateInteriorPaths('{}');", null)
-                            }
-                        }
-                        val destMarker = uiState.destinationMarker
-                        if (destMarker != null) wv.evaluateJavascript("if(typeof updateDestinationMarker==='function')updateDestinationMarker(${destMarker.latitude}, ${destMarker.longitude});", null)
-                        else wv.evaluateJavascript("if(typeof clearDestinationMarker==='function')clearDestinationMarker();", null)
-                        wv.evaluateJavascript("if(typeof updateDestinationPlacingMode==='function')updateDestinationPlacingMode(${uiState.isTargetingWaypoint});", null)
-                        if (uiState.destinationMarker != null && uiState.routeWaypoints.isNotEmpty() && uiState.showDestinationRoute) {
-                            val currentLoc = uiState.currentLocation
-                            if (currentLoc != null) {
-                                val routeJson = uiState.routeWaypoints.map { mapOf("lat" to it.latitude, "lng" to it.longitude) }.let { gson.toJson(it) }
-                                wv.evaluateJavascript("if(typeof updateDestinationRoute==='function')updateDestinationRoute(${currentLoc.latitude}, ${currentLoc.longitude}, $routeJson, true);", null)
-                            }
-                        } else wv.evaluateJavascript("if(typeof updateDestinationRoute==='function')updateDestinationRoute(0, 0, [], false);", null)
-
-                        // MODO HISTORIA: línea GPS roja de campaña (ENCB → ESCOM). Se dibuja/limpia
-                        // según el estado; al llegar a ESCOM el VM la vacía y aquí se borra sola.
-                        if (uiState.campaignRouteWaypoints.isNotEmpty()) {
-                            val campJson = uiState.campaignRouteWaypoints.map { mapOf("lat" to it.latitude, "lng" to it.longitude) }.let { gson.toJson(it) }
-                            wv.evaluateJavascript("if(typeof updateCampaignRoute==='function')updateCampaignRoute($campJson);", null)
-                        } else wv.evaluateJavascript("if(typeof updateCampaignRoute==='function')updateCampaignRoute([]);", null)
-
-                        // Waypoints de patrullas FUERA de la neblina (paridad con OSM nativo):
-                        // 🚓 + línea punteada jugador→patrulla mientras te buscan. Las patrullas
-                        // DENTRO de la neblina ya se dibujan como sprite (no llevan waypoint).
-                        val plocW = uiState.currentLocation
-                        val patrolsW = if (plocW != null && uiState.wantedLevel > 0) {
-                            uiState.npcs.filter {
-                                it.type == NpcType.POLICE_CAR &&
-                                    !npcWithinRadius(it.location.latitude, it.location.longitude,
-                                        plocW.latitude, plocW.longitude, NPC_FOG_VISION_METERS)
-                            }
-                        } else emptyList()
-                        if (patrolsW.isNotEmpty() || lastWebPoliceHolder[0]) {
-                            lastWebPoliceHolder[0] = patrolsW.isNotEmpty()
-                            val policePayload = patrolsW.map {
-                                mapOf("id" to it.id, "lat" to it.location.latitude, "lng" to it.location.longitude)
-                            }
-                            wv.evaluateJavascript("if(typeof updatePolice==='function')updatePolice(${plocW?.latitude ?: 0.0}, ${plocW?.longitude ?: 0.0}, ${gson.toJson(policePayload)});", null)
-                        }
-
-                        // Waypoints de ZOMBIS FUERA del fog (paridad con OSM nativo): 🧟 + línea
-                        // ROJA punteada jugador→zombi en modo apocalipsis. Los zombis DENTRO del
-                        // fog ya se dibujan con su sprite (no llevan waypoint).
-                        val zombiesW = if (plocW != null && uiState.globalZombieMode) {
-                            uiState.npcs.filter {
-                                it.type == NpcType.ZOMBIE && it.health > 0f &&
-                                    !npcWithinRadius(it.location.latitude, it.location.longitude,
-                                        plocW.latitude, plocW.longitude, NPC_FOG_VISION_METERS)
-                            }
-                        } else emptyList()
-                        if (zombiesW.isNotEmpty() || lastWebZombieHolder[0]) {
-                            lastWebZombieHolder[0] = zombiesW.isNotEmpty()
-                            val zombiePayload = zombiesW.map {
-                                mapOf("id" to it.id, "lat" to it.location.latitude, "lng" to it.location.longitude)
-                            }
-                            wv.evaluateJavascript("if(typeof updateZombies==='function')updateZombies(${plocW?.latitude ?: 0.0}, ${plocW?.longitude ?: 0.0}, ${gson.toJson(zombiePayload)});", null)
-                        }
-
-                        // ─── PRANKEDY (compañero) en WEB ──────────────────────────────────
-                        // Su sprite NO es un NPC normal (assets propios), así que se dibuja con
-                        // su propio marcador Leaflet. Se envía CADA frame (FUERA del guard de la
-                        // lista de NPCs) porque se mueve suave siguiendo al jugador.
-                        run {
-                            val pkLoc = uiState.prankedyLocation
-                            if (pkLoc != null && !uiState.isDriving) {
-                                val pkTime = timeMs
-                                val pkAnim = uiState.prankedyAnimState
-                                val pkFrames = when (pkAnim) {
-                                    ovh.gabrielhuav.pow.domain.models.ai.PrankedyAnimState.IDLE -> 3
-                                    ovh.gabrielhuav.pow.domain.models.ai.PrankedyAnimState.WALK -> 9
-                                    ovh.gabrielhuav.pow.domain.models.ai.PrankedyAnimState.RUN -> 8
-                                    ovh.gabrielhuav.pow.domain.models.ai.PrankedyAnimState.RUN_TANQUE -> 9
-                                    ovh.gabrielhuav.pow.domain.models.ai.PrankedyAnimState.ATTACK -> 5
-                                }
-                                val pkFrame = ((pkTime / 200L) % pkFrames).toInt()
-                                val pkKey = "PRANKEDY_WEB_${pkAnim.name}_${uiState.prankedyFacingRight}_$pkFrame"
-                                val pkB64 = base64Cache[pkKey]
-                                if (pkB64 == null) {
-                                    base64Cache[pkKey] = ""
-                                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.Default) {
-                                        val d = ovh.gabrielhuav.pow.features.map_exterior.ui.components.PrankedySpriteManager
-                                            .getDrawable(context, pkAnim, timeMs, highResRenderScale, uiState.prankedyFacingRight)
-                                        val bmp = d?.bitmap
-                                        if (bmp != null) {
-                                            val out = java.io.ByteArrayOutputStream()
-                                            bmp.compress(android.graphics.Bitmap.CompressFormat.WEBP, 90, out)
-                                            val b64 = "data:image/webp;base64," + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
-                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { base64Cache[pkKey] = b64 }
-                                        }
-                                    }
-                                }
-                                if (!pkB64.isNullOrEmpty() && !registeredWebImages.contains(pkKey)) {
-                                    wv.evaluateJavascript("if(!window.imgCache) window.imgCache={}; window.imgCache['$pkKey'] = '$pkB64';", null)
-                                    registeredWebImages.add(pkKey)
-                                }
-                                val pkFlip = if (uiState.prankedyFacingRight) 1 else -1
-                                val pkDlg = uiState.prankedyDialogue?.let { JSONObject.quote(it) } ?: "null"
-                                val pkHealth = uiState.prankedyHealth
-                                val pkMaxHealth = ovh.gabrielhuav.pow.domain.models.ai.PrankedyManager.MAX_HEALTH
-                                wv.evaluateJavascript("if(typeof updatePrankedy==='function')updatePrankedy({lat:${pkLoc.latitude},lng:${pkLoc.longitude},imageKey:'$pkKey',flip:$pkFlip,dialogue:$pkDlg,health:$pkHealth,maxHealth:$pkMaxHealth});", null)
-                            } else {
-                                wv.evaluateJavascript("if(typeof clearPrankedy==='function')clearPrankedy();", null)
-                            }
-                        }
-
-                        // ─── PRANKEDY: proyectil (tanque de gas, p_objeto) en WEB ──────────
-                        run {
-                            val pjStart = uiState.prankedyProjectileStart
-                            val pjEnd = uiState.prankedyProjectileTarget
-                            if (uiState.prankedyProjectileActive && pjStart != null && pjEnd != null && !uiState.isDriving) {
-                                val pjP = uiState.prankedyProjectileProgress
-                                val pjLat = pjStart.latitude + (pjEnd.latitude - pjStart.latitude) * pjP
-                                val pjLon = pjStart.longitude + (pjEnd.longitude - pjStart.longitude) * pjP
-                                val pjTime = timeMs
-                                val pjFrame = ((pjTime / 150L) % 3L).toInt()
-                                val pjKey = "PRANKEDY_PROJ_WEB_$pjFrame"
-                                val pjB64 = base64Cache[pjKey]
-                                if (pjB64 == null) {
-                                    base64Cache[pjKey] = ""
-                                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.Default) {
-                                        val d = ovh.gabrielhuav.pow.features.map_exterior.ui.components.PrankedySpriteManager
-                                            .getProjectileDrawable(context, timeMs, highResRenderScale)
-                                        val bmp = d?.bitmap
-                                        if (bmp != null) {
-                                            val out = java.io.ByteArrayOutputStream()
-                                            bmp.compress(android.graphics.Bitmap.CompressFormat.WEBP, 90, out)
-                                            val b64 = "data:image/webp;base64," + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
-                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { base64Cache[pjKey] = b64 }
-                                        }
-                                    }
-                                }
-                                if (!pjB64.isNullOrEmpty() && !registeredWebImages.contains(pjKey)) {
-                                    wv.evaluateJavascript("if(!window.imgCache) window.imgCache={}; window.imgCache['$pjKey'] = '$pjB64';", null)
-                                    registeredWebImages.add(pjKey)
-                                }
-                                wv.evaluateJavascript("if(typeof updatePrankedyProjectile==='function')updatePrankedyProjectile({lat:$pjLat,lng:$pjLon,imageKey:'$pjKey'});", null)
-                            } else {
-                                wv.evaluateJavascript("if(typeof clearPrankedyProjectile==='function')clearPrankedyProjectile();", null)
-                            }
-                        }
-                    }
+                // REFACTOR: rama WEB (Leaflet/WebView) extraída a WorldMapScreenWeb.kt (mismo paquete)
+                // para reducir el tamaño de este composable. Cachés/holders locales se pasan por parámetro.
+                WebMapLayer(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    context = context,
+                    roadNetwork = roadNetwork,
+                    allCollectibles = allCollectibles,
+                    cachingClient = cachingClient,
+                    webViewRef = webViewRef,
+                    gson = gson,
+                    coroutineScope = coroutineScope,
+                    base64Cache = base64Cache,
+                    widthCache = widthCache,
+                    heightCache = heightCache,
+                    registeredWebImages = registeredWebImages,
+                    lastWebNpcHolder = lastWebNpcHolder,
+                    lastWebLandmarkHolder = lastWebLandmarkHolder,
+                    webLmTick = webLmTick,
+                    lastWebMetroHolder = lastWebMetroHolder,
+                    webMetroTick = webMetroTick,
+                    lastWebIpOn = lastWebIpOn,
+                    lastWebIpLm = lastWebIpLm,
+                    lastWebIpColl = lastWebIpColl,
+                    lastWebPoliceHolder = lastWebPoliceHolder,
+                    lastWebZombieHolder = lastWebZombieHolder,
                 )
             }
         }
@@ -1622,6 +808,54 @@ fun WorldMapScreen(
             }
         }
 
+        // ─── WIDGET DE OBJETIVO (Modo Historia) ──────────────────────────────────
+        // Centrado arriba y difuminado para no chocar con los widgets de las esquinas.
+        uiState.currentObjective?.let { obj ->
+            ObjectivesWidget(
+                objective = obj,
+                done = uiState.objectiveDone,
+                playerLocation = uiState.currentLocation,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp)
+            )
+        }
+
+        // ─── MISIÓN FALLIDA (Modo Historia: la policía mató a Prankedy) ──────────
+        // Pantalla a pantalla completa, estilo "WASTED", con el texto EN 2 LÍNEAS.
+        if (uiState.showMissionFailed) {
+            Box(
+                modifier = Modifier.fillMaxSize().background(Color(0xDD000000)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_mission_failed),
+                        color = Color(0xFFD32F2F),
+                        fontSize = 54.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 5.sp,
+                        lineHeight = 60.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Spacer(Modifier.height(28.dp))
+                    // REINTENTAR: reinicia la misión en sitio (sin volver a la pantalla de inicio).
+                    Button(
+                        onClick = { onRetryMission() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth(0.6f).height(50.dp)
+                    ) {
+                        Text(androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_retry_mission), color = Color.White, fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp, letterSpacing = 1.sp)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    TextButton(onClick = { onNavigateToMainMenu() }) {
+                        Text(androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_exit_to_menu), color = Color.White.copy(alpha = 0.85f),
+                            fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
         // ─── AVISO DE CARJACK (te van a bajar del auto) ──────────────────────────
         uiState.carjackWarning?.let { warn ->
             Box(
@@ -1694,6 +928,15 @@ fun WorldMapScreen(
                         else -> Color(0xFFE53935)
                     },
                     isLoading = false
+                )
+            }
+            // Widget de coordenadas (Ajustes → Interfaz): X=longitud, Y=latitud, Z=GLOBAL.
+            AnimatedVisibility(visible = uiState.showCoordsWidget, enter = fadeIn(), exit = fadeOut()) {
+                val loc = uiState.currentLocation
+                CoordsWidget(
+                    x = loc?.let { "%.5f".format(it.longitude) } ?: "--",
+                    y = loc?.let { "%.5f".format(it.latitude) } ?: "--",
+                    z = "GLOBAL"
                 )
             }
             AnimatedVisibility(visible = uiState.isDesignerMode, enter = fadeIn(), exit = fadeOut()) {
@@ -1799,16 +1042,16 @@ fun WorldMapScreen(
                             items = buildList {
                                 add(OptionMenuItem(androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_opt_change_skin), Icons.Default.Person, Color(0xFFD91B5B)) { viewModel.toggleSkinSelector(true) })
                                 // MODO HISTORIA: guardado manual → abre el selector de slots.
-                                add(OptionMenuItem("Guardar partida", Icons.Default.School, Color(0xFF4CAF50)) {
+                                add(OptionMenuItem(androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_opt_save_game), Icons.Default.School, Color(0xFF4CAF50)) {
                                     onRequestSaveGame()
                                 })
-                                add(OptionMenuItem(androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_opt_teleport), Icons.Default.LocationOn, Color(0xFFFF9800)) { viewModel.toggleTeleportMenu(true) })
+                                // Teletransportarse: solo en Modo Desarrollador.
+                                if (developerMode) add(OptionMenuItem(androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_opt_teleport), Icons.Default.LocationOn, Color(0xFFFF9800)) { viewModel.toggleTeleportMenu(true) })
                                 // (Submenú "Ir a…" eliminado: "Ir a ESCOM" ya es el primer punto de
                                 // "Teletransportarse…" y "Ir a tu Ubicación (GPS)" se movió al inicio
                                 // de esa misma lista.)
-                                // Submenú anidado: agrupa "Modo Diseñador" + androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_opt_debug_interiors)
-                                // (+ androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_opt_add_asset) cuando el diseñador está activo).
-                                add(
+                                // Submenú anidado "Diseñador / Debug": solo en Modo Desarrollador.
+                                if (developerMode) add(
                                     OptionMenuGroup(
                                         id = "disenador_debug",
                                         label = androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_fab_designer),
@@ -1823,16 +1066,14 @@ fun WorldMapScreen(
                                         }
                                     )
                                 )
-                                // Apocalipsis Zombi Global: activar/desactivar desde CUALQUIER lugar
-                                // (no solo con la mano de ESCOM). Toggle global; se replica por red.
-                                add(OptionMenuItem(
+                                // Apocalipsis Zombi Global: solo en Modo Desarrollador.
+                                if (developerMode) add(OptionMenuItem(
                                     if (uiState.globalZombieMode) androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_opt_apocalypse_off) else androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_opt_apocalypse_on),
                                     Icons.Default.Warning,
                                     if (uiState.globalZombieMode) Color(0xFFE53935) else Color.White
                                 ) { viewModel.toggleGlobalZombieMode() })
-                                // Prankedy: NPC hostil que te ataca (y te defiende de otros NPCs).
-                                // Toggle on/off, igual que el apocalipsis.
-                                add(OptionMenuItem(
+                                // Prankedy (toggle manual hostil): solo en Modo Desarrollador.
+                                if (developerMode) add(OptionMenuItem(
                                     if (uiState.prankedyEnabled) androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_opt_prankedy_off) else androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_opt_prankedy_on),
                                     Icons.Default.Face,
                                     if (uiState.prankedyEnabled) Color(0xFFD4AF37) else Color.White
@@ -1999,7 +1240,8 @@ fun WorldMapScreen(
                 currentSkin    = uiState.selectedSkin,
                 context        = context,
                 onSkinSelected = { viewModel.selectSkin(it) },
-                onDismiss      = { viewModel.toggleSkinSelector(false) }
+                onDismiss      = { viewModel.toggleSkinSelector(false) },
+                developerMode  = developerMode
             )
         }
 
@@ -2060,246 +1302,39 @@ fun WorldMapScreen(
                 blocksCount = uiState.debugEditBlocks.size,
                 navPedCount = uiState.debugEditNavPed.size,
                 navCarCount = uiState.debugEditNavCar.size,
+                routeNpcsActive = uiState.npcs.any { it.id.startsWith("CAMPAIGN_ROUTE_") },
                 onSelectTool = { viewModel.setDebugEditTool(it) },
                 onUndo = { viewModel.undoLastDebugShape() },
                 onClear = { viewModel.clearDebugEdits() },
                 onExport = { collisionsExportLauncher.launch("exterior_collisions_editado.json") },
                 onImport = { collisionsImportLauncher.launch(arrayOf("application/json", "*/*")) },
+                onToggleRouteNpcs = { viewModel.toggleCampaignRouteNpcsDebug() },
+                onExit = {
+                    viewModel.setDebugEditTool(DebugEditTool.NONE)
+                    viewModel.toggleInteriorDebugOverlay(false)
+                },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
+                    .fillMaxWidth(0.6f)
                     .padding(8.dp)
             )
         }
 
-        // ─── WIDGET DE OBJETIVOS (Modo Historia) — siempre visible si hay objetivo ──
-        uiState.currentObjective?.let { obj ->
-            ovh.gabrielhuav.pow.features.map_exterior.ui.components.ObjectivesWidget(
-                objective = obj,
-                done = uiState.objectiveDone,
-                playerLocation = uiState.currentLocation,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .systemBarsPadding()
-                    .padding(start = 12.dp, top = 12.dp)
-            )
-        }
+        // (El widget de OBJETIVO se dibuja UNA sola vez, arriba-centro — ver más arriba.
+        // Antes había aquí un segundo widget arriba-izquierda que duplicaba el objetivo.)
 
-        val configuration = LocalConfiguration.current
-        val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
-        val maxScale = if (isPortrait) 1.0f else 1.4f
-        val effectiveScale = uiState.controlsScale.coerceAtMost(maxScale)
-        val sidePadding = if (isPortrait) 16.dp else 64.dp
-        val bottomPadding = if (isPortrait) 48.dp else 32.dp
-
-        // En HORIZONTAL, al abrir el menú de Opciones, este (arriba a la derecha) se
-        // extiende hacia abajo y choca con el control de la derecha (D-pad/diamante).
-        // Desplazamos ese control hacia la izquierda mientras el menú está abierto para
-        // que el usuario pueda usar el menú (con su scroll) sin que tape los botones.
-        val isMenuOpenLandscape = optionsExpanded && !isPortrait
-        val rightCtrlShift by animateDpAsState(
-            targetValue = if (isMenuOpenLandscape) (-150).dp else 0.dp,
-            label = "rightCtrlShift"
-        )
-        val rightShiftMod = Modifier.offset(x = rightCtrlShift)
-
-        if (uiState.globalZombieMode) {
-            androidx.compose.material3.Button(
-                onClick = { viewModel.exitGlobalZombieMode() },
-                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = androidx.compose.ui.graphics.Color.Red),
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 110.dp)
-            ) {
-                androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_exit_apocalypse), color = androidx.compose.ui.graphics.Color.White, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-            }
-        }
-
-        if (!uiState.isDesignerMode && !uiState.showInteriorDebugOverlay) { // Oculta joystick y botones en modo diseñador y al editar el Debug Interiores
-            Row(modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(bottom = bottomPadding, start = sidePadding, end = sidePadding), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                if (uiState.isDriving) {
-                // D-pad de conducción: SOLO gira (IZQ/DER). Arriba/abajo quedan inertes
-                // a propósito — gas y freno viven únicamente en el diamante PS4.
-                val drivingDpad = @Composable { m: Modifier ->
-                    VehicleDPadController(
-                        modifier = m.scale(effectiveScale),
-                        onUp = { /* sin uso en conducción */ },
-                        onDown = { /* sin uso en conducción */ },
-                        onLeft = { viewModel.steerLeft(it) },
-                        onRight = { viewModel.steerRight(it) }
-                    )
-                }
-                // Diamante estilo PS4: △ SALIR · ✕ gas · ○ freno · □ freno de mano.
-                val drivingActions = @Composable { m: Modifier ->
-                    Ps4ActionButtonsController(
-                        modifier = m.scale(effectiveScale),
-                        onAccelerate = { viewModel.accelerate(it) },
-                        onBrake = { viewModel.brake(it) },
-                        onHandbrake = { viewModel.brake(it) },
-                        onExit = { isPressed ->
-                            if (isPressed) {
-                                viewModel.onInteractButtonPressed()
-                                yButtonHoldJob?.cancel()
-                                yButtonHoldJob = coroutineScope.launch { kotlinx.coroutines.delay(3000); viewModel.toggleTeleportMenu(true) }
-                            } else { yButtonHoldJob?.cancel() }
-                        }
-                    )
-                }
-                // El control de la DERECHA (segundo) recibe el desplazamiento.
-                if (uiState.swapControls) { drivingActions(Modifier); drivingDpad(rightShiftMod) } else { drivingDpad(Modifier); drivingActions(rightShiftMod) }
-            } else {
-                    val movementComponent = @Composable { m: Modifier ->
-                        if (uiState.controlType == ControlType.DPAD) DPadController(modifier = m.scale(effectiveScale), onDirectionPressed = { viewModel.moveCharacter(it) })
-                        else JoystickController(modifier = m.scale(effectiveScale), onMove = { viewModel.moveCharacterByAngle(it) })
-                    }
-                    val actionComponent = @Composable { m: Modifier ->
-                        ActionButtonsController(
-                            modifier = m.scale(effectiveScale),
-                            onActionChanged = { action, isPressed ->
-                                if (action == GameAction.X && isPressed) {
-                                    viewModel.handleInteraction()
-                                }
-                                if (action == GameAction.Y) {
-                                    if (isPressed) {
-                                        viewModel.onInteractButtonPressed()
-                                        yButtonHoldJob?.cancel()
-                                        yButtonHoldJob = coroutineScope.launch { kotlinx.coroutines.delay(3000); viewModel.toggleTeleportMenu(true) }
-                                    } else {
-                                        yButtonHoldJob?.cancel()
-                                    }
-                                }
-                                viewModel.updateActionState(action, isPressed)
-                            },
-                            onClaimCollectiblePressed = { viewModel.onClaimCollectiblePressed() }
-                        )
-                    }
-                    // El control de la DERECHA (segundo) recibe el desplazamiento.
-                    if (uiState.swapControls) { actionComponent(Modifier); movementComponent(rightShiftMod) } else { movementComponent(Modifier); actionComponent(rightShiftMod) }
-                }
-            }
-        }
+        // REFACTOR: controles (vals de layout + botón salir apocalipsis + fila D-pad/
+        // joystick/acciones) extraídos a WorldMapScreenControls.kt (mismo paquete).
+        // Es una extensión de BoxScope → se invoca dentro de este Box.
+        WorldMapControls(uiState = uiState, viewModel = viewModel, optionsExpanded = optionsExpanded)
         //}
     }
 
-    if (uiState.showWastedScreen) {
-        Box(modifier = Modifier.fillMaxSize().background(Color(0x99000000)).clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onClick = {})) {
-            var scale by remember { mutableStateOf(0.5f) }
-            LaunchedEffect(Unit) {
-                androidx.compose.animation.core.animate(initialValue = 0.5f, targetValue = 1.3f, animationSpec = tween(durationMillis = 3500, easing = LinearOutSlowInEasing)) { value, _ -> scale = value }
-            }
-            Text(text = androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_wasted), color = Color(0xFFD32F2F), fontSize = 60.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Serif, letterSpacing = 6.sp, modifier = Modifier.align(Alignment.Center).scale(scale))
-        }
-    }
-    if (uiState.showZombiVideo) {
-        ZombiVideoPlayer(
-            context = context,
-            onDismiss = { viewModel.dismissVideo() }
-        )
-    }
-
-    uiState.interactionPrompt?.let { promptText ->
-        Box(modifier = Modifier.fillMaxSize().padding(top = 70.dp), contentAlignment = Alignment.TopCenter) {
-            Text(text = promptText, color = Color.White, fontWeight = FontWeight.Black, fontSize = 16.sp, letterSpacing = 2.sp, modifier = Modifier.background(color = Color(0xFF3B0D1B).copy(alpha = 0.85f), shape = RoundedCornerShape(8.dp)).padding(horizontal = 24.dp, vertical = 12.dp))
-        }
-    }
-
-    uiState.prankedyDialogue?.let { dialogueText ->
-        Box(modifier = Modifier.fillMaxSize().padding(top = 130.dp), contentAlignment = Alignment.TopCenter) {
-            Text(
-                text = dialogueText,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                modifier = Modifier
-                    .widthIn(max = 280.dp)
-                    .background(color = Color(0xFF222222).copy(alpha = 0.9f), shape = RoundedCornerShape(12.dp))
-                    .border(2.dp, Color(0xFFFFCC00), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 20.dp, vertical = 10.dp)
-            )
-        }
-    }
-
-    if (uiState.showPrankedyHireDialog) {
-        PrankedyHireDialog(
-            context = context,
-            isHireable = uiState.prankedyIsHireable,
-            hireableInSeconds = uiState.prankedyHireableInSeconds,
-            onHire = { viewModel.onHirePrankedy() },
-            onDismiss = { viewModel.dismissPrankedyDialog() }
-        )
-    }
-
-    uiState.showClaimedPopupFor?.let { collectible ->
-        CollectibleClaimDialog(collectible = collectible, onDismiss = { viewModel.dismissClaimedPopup() })
-    }
-
-    // ─── ESCOM Door Fade Overlay ─────────────────────────────────────────────
-    val escomFadeAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
-    LaunchedEffect(uiState.showEscomDoorFade) {
-        if (uiState.showEscomDoorFade) {
-            escomFadeAlpha.animateTo(1f, animationSpec = androidx.compose.animation.core.tween(600))
-            viewModel.onEscomDoorFadeComplete()
-            kotlinx.coroutines.delay(200)
-            escomFadeAlpha.animateTo(0f, animationSpec = androidx.compose.animation.core.tween(400))
-        }
-    }
-
-    if (escomFadeAlpha.value > 0f) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = escomFadeAlpha.value))
-        )
-    }
-
-    // ─── Metro Door Fade Overlay ─────────────────────────────────────────────
-    val metroFadeAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
-    LaunchedEffect(uiState.showMetroFade) {
-        if (uiState.showMetroFade) {
-            metroFadeAlpha.animateTo(1f, animationSpec = androidx.compose.animation.core.tween(600))
-            viewModel.onMetroFadeComplete()
-            kotlinx.coroutines.delay(200)
-            metroFadeAlpha.animateTo(0f, animationSpec = androidx.compose.animation.core.tween(400))
-        }
-    }
-    if (metroFadeAlpha.value > 0f) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = metroFadeAlpha.value))
-        )
-    }
-
-    LaunchedEffect(uiState.metroFadeCompleteStation) {
-        val station = uiState.metroFadeCompleteStation
-        if (station != null) {
-            viewModel.consumeMetroFadeComplete()
-            onNavigateToInterior("metro_station_interior/${station.name}")
-        }
-    }
-
-    // ─── Metrobús Fade Overlay ───────────────────────────────────────────────
-    val metrobusFadeAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
-    LaunchedEffect(uiState.showMetrobusFade) {
-        if (uiState.showMetrobusFade) {
-            metrobusFadeAlpha.animateTo(1f, animationSpec = androidx.compose.animation.core.tween(600))
-            viewModel.onMetrobusFadeComplete()
-            kotlinx.coroutines.delay(200)
-            metrobusFadeAlpha.animateTo(0f, animationSpec = androidx.compose.animation.core.tween(400))
-        }
-    }
-    if (metrobusFadeAlpha.value > 0f) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFFC21D24).copy(alpha = metrobusFadeAlpha.value))
-        )
-    }
-
-    LaunchedEffect(uiState.metrobusFadeCompleteStation) {
-        val station = uiState.metrobusFadeCompleteStation
-        if (station != null) {
-            viewModel.consumeMetrobusFadeComplete()
-            onNavigateToInterior("metrobus_station_interior/${station.name}")
-        }
-    }
+    // REFACTOR: overlays/diálogos extraídos a WorldMapScreenOverlays.kt (mismo paquete)
+    // para reducir el tamaño de este archivo. MVVM intacto (solo observa uiState + intenciones).
+    WorldMapOverlays(
+        uiState = uiState,
+        viewModel = viewModel,
+        onNavigateToInterior = onNavigateToInterior
+    )
 }

@@ -34,6 +34,7 @@ import ovh.gabrielhuav.pow.features.interiores.escom.viewmodel.InteriorState
 import ovh.gabrielhuav.pow.features.interiores.escom.viewmodel.InteriorViewModel
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.DPadController
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.JoystickController
+import ovh.gabrielhuav.pow.features.map_exterior.ui.components.CoordsWidget
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.PlayerAction
 import ovh.gabrielhuav.pow.features.settings.models.ControlType
 
@@ -127,7 +128,7 @@ fun InteriorScreenBase(
                 onClick = onExit,
                 modifier = Modifier.background(Color.Black.copy(alpha = 0.6f), CircleShape)
             ) {
-                Icon(Icons.Default.ArrowBack, "Salir", tint = Color.White)
+                Icon(Icons.Default.ArrowBack, androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.cd_exit), tint = Color.White)
             }
             Spacer(Modifier.width(8.dp))
             Text(
@@ -138,6 +139,17 @@ fun InteriorScreenBase(
                 modifier = Modifier
                     .background(Color.Black.copy(alpha = 0.6f))
                     .padding(horizontal = 12.dp, vertical = 6.dp)
+            )
+        }
+
+        // Widget de coordenadas (Ajustes → Interfaz): X/Y = posición normalizada en la
+        // sala, Z = "dónde" estás (nombre del interior).
+        if (state.showCoordsWidget) {
+            CoordsWidget(
+                x = "%.3f".format(state.playerX),
+                y = "%.3f".format(state.playerY),
+                z = title.uppercase(),
+                modifier = Modifier.align(Alignment.TopStart).systemBarsPadding().padding(top = 64.dp, start = 12.dp)
             )
         }
 
@@ -193,10 +205,10 @@ private fun InteriorPlayerSprite(state: InteriorState) {
                 PlayerAction.RUN -> 6
             }
             val assetPath = when (action) {
-                PlayerAction.IDLE    -> "MAIN/lazaroIdle/lazaro_i_$currentFrame.webp"
-                PlayerAction.WALK    -> "MAIN/lazaroWalk/lazaro_w_$currentFrame.webp"
-                PlayerAction.SPECIAL -> "MAIN/lazaroSpecial/lazaro_s_$currentFrame.webp"
-                PlayerAction.RUN     -> "MAIN/lazaroRun/lazaro_r_$currentFrame.webp"
+                PlayerAction.IDLE    -> "SPRITES/PLAYER/lazaroIdle/lazaro_i_$currentFrame.webp"
+                PlayerAction.WALK    -> "SPRITES/PLAYER/lazaroWalk/lazaro_w_$currentFrame.webp"
+                PlayerAction.SPECIAL -> "SPRITES/PLAYER/lazaroSpecial/lazaro_s_$currentFrame.webp"
+                PlayerAction.RUN     -> "SPRITES/PLAYER/lazaroRun/lazaro_r_$currentFrame.webp"
             }
             if (!bitmapCache.containsKey(assetPath)) {
                 val bmp = withContext(Dispatchers.IO) {

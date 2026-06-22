@@ -37,7 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ovh.gabrielhuav.pow.domain.models.Landmark
+import ovh.gabrielhuav.pow.domain.models.map.Landmark
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Checkbox
@@ -188,7 +188,7 @@ fun DesignerPanel(
                 ) {
                     // ANCHO
                     Text(
-                        "ANCHO: ${String.format("%.2f", landmark.scaleX)}x",
+                        androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_designer_width, "${String.format("%.2f", landmark.scaleX)}x"),
                         color = Color.White,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.SemiBold
@@ -225,7 +225,7 @@ fun DesignerPanel(
 
                     // ALTO
                     Text(
-                        "ALTO: ${String.format("%.2f", landmark.scaleY)}x",
+                        androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.wm_designer_height, "${String.format("%.2f", landmark.scaleY)}x"),
                         color = Color.White,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.SemiBold

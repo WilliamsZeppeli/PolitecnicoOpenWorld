@@ -39,7 +39,7 @@ import kotlin.math.hypot
 import kotlin.math.sin
 import kotlin.random.Random
 
-internal fun ZombieGameViewModel.tick() {
+internal fun ZombieInteriorViewModel.tick() {
         val s = _state.value
         val now = System.currentTimeMillis()
 
@@ -48,12 +48,28 @@ internal fun ZombieGameViewModel.tick() {
 
         // Pantallas bloqueantes / modo diseñador: no simular.
         if (s.showVictoryScreen || s.showWastedScreen || s.isExitingToWorld ||
-            s.isExitingToStoryOutro || s.showExitToLobbyDialog || s.designerMode) return
+            s.showExitToLobbyDialog || s.designerMode) {
+            soundManager.stopWalk()
+            soundManager.stopRun()
+            return
+        }
+
+        when (s.playerAction) {
+            PlayerAction.WALK -> { soundManager.playWalk(); soundManager.stopRun() }
+            PlayerAction.RUN -> { soundManager.playRun(); soundManager.stopWalk() }
+            else -> { soundManager.stopWalk(); soundManager.stopRun() }
+        }
+
+        val zombieNear = s.zombies.any { !it.isDying && hypot(it.x - s.playerX, it.y - s.playerY) < 300f }
+        if (zombieNear && now - lastZombieSoundMs > 5000L) {
+            soundManager.playZombieNear()
+            lastZombieSoundMs = now
+        }
 
         if (isMultiplayer) tickOnline(s, now) else tickOffline(s, now)
     }
 
-internal fun ZombieGameViewModel.tickOffline(s: ZombieGameState, now: Long) {
+internal fun ZombieInteriorViewModel.tickOffline(s: ZombieGameState, now: Long) {
         val room = ZombieRoomCatalog.rooms[s.currentRoomIndex]
 
         val stillActive = if (s.activeEffects.isEmpty()) s.activeEffects
@@ -94,6 +110,9 @@ internal fun ZombieGameViewModel.tickOffline(s: ZombieGameState, now: Long) {
             val nx = p.x + p.dirX * PROJECTILE_SPEED
             val ny = p.y + p.dirY * PROJECTILE_SPEED
             if (nx < 0f || ny < 0f || nx > room.worldWidth || ny > room.worldHeight) continue
+            // La bala RESPETA la matriz de colisiones: si el siguiente punto cae en PARED, se detiene
+            // ahí (no atraviesa muros ni mata zombis al otro lado), igual que el movimiento.
+            if (!isWalkable(nx, ny)) continue
             val hit = workingZombies.firstOrNull {
                 !it.isDying && hypot(it.x - nx, it.y - ny) <= PROJECTILE_HIT_RADIUS
             }
@@ -115,6 +134,10 @@ internal fun ZombieGameViewModel.tickOffline(s: ZombieGameState, now: Long) {
         val nearItem = s.items.firstOrNull {
             !it.collected && hypot(it.x - s.playerX, it.y - s.playerY) <= ITEM_PICKUP_DIST
         }
+        // PUZZLE de llaves (ENCB_lab1): ¿el jugador está SOBRE una llave?
+        val nearKey = s.keys.firstOrNull {
+            hypot(it.x - s.playerX, it.y - s.playerY) <= ITEM_PICKUP_DIST
+        }
 
         _state.update {
             it.copy(
@@ -124,6 +147,7 @@ internal fun ZombieGameViewModel.tickOffline(s: ZombieGameState, now: Long) {
                 damagePulseTrigger = pulse,
                 zombiesRemaining = workingZombies.count { z -> !z.isDying },
                 nearbyItemId = nearItem?.id,
+                nearbyKeyId = nearKey?.id,
                 activeEffects = if (effectsChanged) stillActive else it.activeEffects
             )
         }
@@ -136,7 +160,7 @@ internal fun ZombieGameViewModel.tickOffline(s: ZombieGameState, now: Long) {
         }
     }
 
-internal fun ZombieGameViewModel.tickOnline(s: ZombieGameState, now: Long) {
+internal fun ZombieInteriorViewModel.tickOnline(s: ZombieGameState, now: Long) {
         val room = ZombieRoomCatalog.rooms[s.currentRoomIndex]
 
         val stillActive = if (s.activeEffects.isEmpty()) s.activeEffects
@@ -159,6 +183,8 @@ internal fun ZombieGameViewModel.tickOnline(s: ZombieGameState, now: Long) {
             val nx = p.x + p.dirX * PROJECTILE_SPEED
             val ny = p.y + p.dirY * PROJECTILE_SPEED
             if (nx < 0f || ny < 0f || nx > room.worldWidth || ny > room.worldHeight) continue
+            // La bala RESPETA la matriz de colisiones (no atraviesa paredes).
+            if (!isWalkable(nx, ny)) continue
             val hit = s.zombies.firstOrNull {
                 !it.isDying && hypot(it.x - nx, it.y - ny) <= PROJECTILE_HIT_RADIUS
             }
@@ -205,7 +231,7 @@ internal fun ZombieGameViewModel.tickOnline(s: ZombieGameState, now: Long) {
         }
     }
 
-internal fun ZombieGameViewModel.moveZombie(
+internal fun ZombieInteriorViewModel.moveZombie(
         z: ZombieEntity, px: Float, py: Float, now: Long,
         room: ZombieRoom, speedFactor: Float
     ): ZombieEntity {
@@ -247,7 +273,7 @@ internal fun ZombieGameViewModel.moveZombie(
         )
     }
 
-internal fun ZombieGameViewModel.knockbackZombie(
+internal fun ZombieInteriorViewModel.knockbackZombie(
         zx: Float, zy: Float, fromX: Float, fromY: Float, room: ZombieRoom, dist: Float
     ): Pair<Float, Float> {
         val dx = zx - fromX; val dy = zy - fromY

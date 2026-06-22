@@ -8,7 +8,7 @@
     <string name="exit_dialog_dismiss">Exit</string>
 
     <!-- ─── Main menu ─── -->
-    <string name="menu_version">v%1$s - ESCOM Edition</string>
+    <string name="menu_version">ALPHA - v%1$s</string>
     <string name="menu_start_game">FREE ROAM</string>
     <string name="menu_load_game">STORY MODE</string>
     <string name="menu_multiplayer">MULTIPLAYER</string>
@@ -27,12 +27,16 @@
     <string name="menu_warmup_text">The multiplayer server is asleep.\nWaking it up... %1$ds</string>
     <string name="menu_warmup_hint">It may take up to 60 seconds.</string>
     <string name="menu_return">RETURN TO MENU</string>
+    <string name="menu_signed_in_as">Signed in: %1$s</string>
+    <string name="menu_local_mode">Local mode (no account)</string>
+    <!-- Generic back button (collectibles, settings) -->
+    <string name="menu_back">BACK</string>
 
     <!-- ─── Story Mode / Campaign (features/main_menu) ─── -->
     <string name="story_title">STORY MODE</string>
     <string name="story_subtitle">The Politécnico outbreak</string>
     <string name="story_prologue_heading">PROLOGUE</string>
-    <string name="story_prologue">One day, at the ENCB, Prankedy showed up pulling his usual pranks and, because of one of them, accidentally ended up in the middle of a thesis-project experiment: the creation of a corrosive substance, able to poison and seep through latex. The mistake goes unnoticed… and time goes by.</string>
+    <string name="story_prologue">One day, at the ENCB, Prankedy showed up pulling his usual pranks and, because of one of them, accidentally ended up in the middle of an experiment that triggered the creation of an unknown, infectious compound, able to seep through latex. The mistake goes unnoticed… and time goes by.</string>
     <string name="story_choose_school">Choose your school</string>
     <string name="story_school_unavailable">In development</string>
     <string name="story_school_escom_desc">Zacatenco, Mexico City · Available</string>
@@ -40,7 +44,7 @@
     <string name="story_load_game">LOAD GAME</string>
     <string name="story_no_saves">No saved games</string>
     <string name="story_saved_at">Saved game · %1$s</string>
-    <string name="story_start">START</string>
+    <string name="story_start">NEW GAME</string>
     <string name="story_back">BACK</string>
     <!-- Campaign intro ("Ready to Start") -->
     <string name="story_intro_ready">Ready to Start</string>
@@ -65,6 +69,9 @@
     <string name="settings_npc_lod_desc">Draws far NPCs as emojis 🧍🚗🧟 and keeps the full sprite only for very close ones. Cuts render cost (ideal in multiplayer with many NPCs).</string>
     <string name="settings_npc_full_title">Optimize for low-end</string>
     <string name="settings_npc_full_desc">Replaces ALL NPC assets with emojis 🧍🚗🧟👮 regardless of distance. No sprites or bitmaps are generated: the lightest possible mode, for very weak devices.</string>
+    <string name="settings_optimize_device">Optimize for my device</string>
+    <string name="settings_optimize_device_desc">One tap applies the lightest low-end settings: drops NPC count to the minimum and draws them all as emoji.</string>
+    <string name="settings_optimize_applied">Settings optimized for low-end</string>
     <string name="settings_map_provider">Map Provider</string>
     <string name="settings_map_change">Change Map</string>
     <string name="settings_map_restore">Reset Map</string>
@@ -85,6 +92,27 @@
     <string name="settings_zoom_widget_desc">Shows the current zoom level live</string>
     <string name="settings_speedometer">Speedometer</string>
     <string name="settings_speedometer_desc">Shows your speed (km/h) while driving</string>
+    <string name="settings_coords_widget">Coordinates (X/Y/Z)</string>
+    <string name="settings_coords_widget_desc">Shows your X/Y/Z position in the world and indoors</string>
+    <string name="settings_developer_mode">Developer Mode</string>
+    <string name="settings_developer_mode_desc">Shows test options and buttons reserved for development</string>
+    <!-- ─── Account / Authentication (Google Sign-In) ─── -->
+    <string name="settings_cat_account">Account</string>
+    <string name="settings_account_desc">Sign in with Google to play online. Local play and Story Mode don\'t require an account.</string>
+    <string name="settings_account_signed_in_as">Signed in as:\n%1$s</string>
+    <string name="settings_account_not_signed_in">You are not signed in.</string>
+    <string name="settings_account_sign_in">Sign in with Google</string>
+    <string name="settings_account_sign_out">Sign out</string>
+    <string name="settings_account_delete">Delete my account and data</string>
+    <string name="settings_account_delete_confirm_title">Delete your account?</string>
+    <string name="settings_account_delete_confirm_text">Your game account and the data saved on this device (campaign saves) will be deleted. This cannot be undone.</string>
+    <string name="settings_account_delete_done">Account and data deleted.</string>
+    <string name="settings_account_relogin_needed">For security, please sign in again before deleting your account.</string>
+    <string name="settings_account_sign_in_error">Sign-in failed.</string>
+    <string name="settings_account_privacy">View privacy policy</string>
+    <string name="settings_cat_audio">Audio</string>
+    <string name="settings_music_volume">Music volume</string>
+    <string name="settings_sfx_volume">Sound effects volume</string>
     <string name="settings_language">Language</string>
     <string name="settings_language_system">System (default)</string>
     <string name="settings_controls_saved">Controls settings saved</string>
@@ -288,5 +316,98 @@
     
     <string name="settings_dpad">D-Pad</string>
     <string name="settings_joystick">Virtual Joystick</string>
+
+    <!-- ─── Story Mode: mission failed ─── -->
+    <string name="wm_mission_failed">MISSION\nFAILED</string>
+    <string name="wm_retry_mission">RETRY MISSION</string>
+    <string name="wm_exit_to_menu">Exit to menu</string>
+    <string name="wm_tip_carjack">Press Y near a car to enter.</string>
+    <string name="wm_opt_save_game">Save game</string>
+    <!-- ─── Objective widget (campaign) ─── -->
+    <string name="wm_objective_label">🎯 OBJECTIVE</string>
+    <string name="wm_objective_done">✅ Complete</string>
+    <string name="wm_dist_km">%1$s km away</string>
+    <string name="wm_dist_m">%1$d m away</string>
+    <!-- ─── Prankedy: full hire-dialog description ─── -->
+    <string name="wm_prankedy_desc_full">A mysterious character that appeared in the halls of the Polytechnic. An expert in pranks and throwing objects from afar. With him on your side, enemies have little chance.\n\n⚔️ Attacks hostile NPCs automatically\n🏃 Follows you wherever you go\n🎭 Always has something to say</string>
+    <!-- ─── Interior Debug Editor (Developer Mode) ─── -->
+    <string name="dbg_move_recenter">Move (tap = recenter)</string>
+    <string name="dbg_exit">Exit</string>
+    <string name="dbg_shape_rect">a rectangle</string>
+    <string name="dbg_shape_line">a line</string>
+    <string name="dbg_hint_idle">Line editor: pick a tool and draw with your finger on the map</string>
+    <string name="dbg_hint_draw">Draw with your finger: drag to make %1$s</string>
+    <string name="dbg_tool_wall">Wall</string>
+    <string name="dbg_tool_zone">Zone</string>
+    <string name="dbg_tool_ped">Pedestrian</string>
+    <string name="dbg_tool_car">Cars</string>
+    <string name="dbg_undo">Undo</string>
+    <string name="dbg_clear">Clear</string>
+    <string name="dbg_export">Export</string>
+    <string name="dbg_import">Import</string>
+    <string name="dbg_route_remove">Remove route NPCs</string>
+    <string name="dbg_route_seed">Seed 60 route NPCs</string>
+    <string name="dbg_counts">walls %1$d - zones %2$d - pedestrian %3$d - cars %4$d</string>
+    <!-- ─── Story Mode: comic intro + slot picker ─── -->
+    <string name="story_choose_slot">Choose a slot to load your game.</string>
+    <string name="story_tap_start">Tap the screen to START</string>
+    <string name="story_tap_continue">Tap on the right to continue</string>
+    <string name="story_intro_back">&lt; Back</string>
+    <string name="story_intro_skip">Skip</string>
+    <string name="story_intro_start">Start</string>
+    <!-- ─── Intro comic editor (Developer Mode) ─── -->
+    <string name="story_ed_done">Done</string>
+    <string name="story_ed_edit">Edit</string>
+    <string name="story_ed_move">⠿  Move panel  (drag me)</string>
+    <string name="story_ed_box">Box - top=%1$.2f height=%2$.2f width=%3$.2f font=%4$.0f</string>
+    <string name="story_ed_up">Up</string>
+    <string name="story_ed_down">Down</string>
+    <string name="story_ed_h_minus">Height -</string>
+    <string name="story_ed_h_plus">Height +</string>
+    <string name="story_ed_w_minus">Width -</string>
+    <string name="story_ed_w_plus">Width +</string>
+    <string name="story_ed_f_minus">Font -</string>
+    <string name="story_ed_f_plus">Font +</string>
+    <string name="story_ed_all">All</string>
+    <string name="story_ed_export">Export</string>
+    <!-- ─── Interiors / zombies (player-facing) ─── -->
+    <string name="cd_exit">Exit</string>
+    <string name="cd_key">Key</string>
+    <string name="cd_player_remote">Remote player</string>
+    <string name="zhud_inv_empty">Empty. Find and pick up a key.</string>
+    <string name="zhud_inv_has_key">Key stored. Try it on the forward door (→).</string>
+    <string name="zgame_key_prompt">🔑 There\'s a key — press ACTION to inspect it</string>
+    <string name="zgame_objective_investigate">Objective: Investigate what happened</string>
+    <!-- ─── Save/load dialogs (MainActivity) ─── -->
+    <string name="save_dialog_load">Load game</string>
+    <string name="save_dialog_new_slot">New game · choose slot</string>
+    <string name="save_toast_saved">Game saved (slot %1$s)</string>
+    <!-- ─── Metrobus transit (player-facing) ─── -->
+    <string name="cd_metrobus_map">Metrobus map</string>
+    <string name="int_metrobus_select_dest">METROBUS SYSTEM · SELECT YOUR DESTINATION</string>
+    <string name="int_save_waypoints">Save Waypoints</string>
+    <string name="int_metrobus_select_station">Select Metrobus Station</string>
+    <string name="int_metrobus_header">METROBUS · %1$s</string>
+    <string name="int_designer_metrobus">METROBUS DESIGNER · %1$s</string>
+    <string name="cd_metrobus_player">Metrobus player</string>
+    <!-- ─── Matrix/waypoint designer (shared metro/metrobus/zombie, Developer Mode) ─── -->
+    <string name="int_designer">Designer</string>
+    <string name="int_grid_paint">Tap or drag on the grid. Red = wall.</string>
+    <string name="int_matrix">MATRIX</string>
+    <string name="int_waypoints">WAYPOINTS</string>
+    <string name="int_wall">WALL</string>
+    <string name="int_erase">ERASE</string>
+    <string name="int_save">SAVE</string>
+    <string name="int_w_minus">WIDTH −</string>
+    <string name="int_w_plus">WIDTH +</string>
+    <string name="int_h_minus">HEIGHT −</string>
+    <string name="int_h_plus">HEIGHT +</string>
+    <string name="int_col_minus">COL −</string>
+    <string name="int_col_plus">COL +</string>
+    <string name="int_row_minus">ROW −</string>
+    <string name="int_row_plus">ROW +</string>
+    <string name="int_move_handle">⠿ Move (tap = recenter)</string>
+    <string name="cd_zombie">Zombie</string>
+    <string name="zhud_inventory">INVENTORY</string>
 
 </resources>

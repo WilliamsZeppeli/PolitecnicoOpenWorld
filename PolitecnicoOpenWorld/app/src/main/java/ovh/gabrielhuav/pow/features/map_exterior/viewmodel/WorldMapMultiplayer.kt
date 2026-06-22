@@ -26,18 +26,18 @@ import ovh.gabrielhuav.pow.data.local.room.PowDatabase
 import ovh.gabrielhuav.pow.data.network.WebSocketManager
 import ovh.gabrielhuav.pow.data.repository.OverpassRepository
 import ovh.gabrielhuav.pow.data.repository.SettingsRepository
-import ovh.gabrielhuav.pow.domain.models.CarModel
-import ovh.gabrielhuav.pow.domain.models.InteriorBuilding
-import ovh.gabrielhuav.pow.domain.models.MapWay
-import ovh.gabrielhuav.pow.domain.models.Npc
-import ovh.gabrielhuav.pow.domain.models.NpcType
+import ovh.gabrielhuav.pow.domain.models.map.CarModel
+import ovh.gabrielhuav.pow.domain.models.map.InteriorBuilding
+import ovh.gabrielhuav.pow.domain.models.map.MapWay
+import ovh.gabrielhuav.pow.domain.models.map.Npc
+import ovh.gabrielhuav.pow.domain.models.map.NpcType
 import ovh.gabrielhuav.pow.domain.models.ai.NpcAiManager
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.PlayerAction
 import ovh.gabrielhuav.pow.features.settings.models.ControlType
 import ovh.gabrielhuav.pow.data.local.room.entity.LandmarkEntity
-import ovh.gabrielhuav.pow.domain.models.Landmark
-import ovh.gabrielhuav.pow.domain.models.LandmarkCatalogManager
-import ovh.gabrielhuav.pow.domain.models.LandmarkAssetTemplate
+import ovh.gabrielhuav.pow.domain.models.map.Landmark
+import ovh.gabrielhuav.pow.domain.models.map.LandmarkCatalogManager
+import ovh.gabrielhuav.pow.domain.models.map.LandmarkAssetTemplate
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -51,11 +51,19 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.math.abs
 import ovh.gabrielhuav.pow.data.repository.CollectibleRepository
-import ovh.gabrielhuav.pow.domain.models.ActiveCollectible
+import ovh.gabrielhuav.pow.domain.models.map.ActiveCollectible
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import ovh.gabrielhuav.pow.domain.models.ShineCTOLocation
+import ovh.gabrielhuav.pow.domain.models.map.ShineCTOLocation
 
+// DE-DUP (2026-06-21, par 7): versión CANÓNICA FUSIONADA (antes el miembro de WorldMapViewModel.kt
+// la sombreaba). Esta extensión ya traía 3 arreglos que estaban MUERTOS: (1) MASTER_SYNC_CHECK solo
+// limpia NPCs con isRemote=true (evita parpadeo de los NPCs que este cliente spawnea como host);
+// (2) PLAYER_DAMAGE enruta takeDamage a Dispatchers.Main (handleMultiplayerMessage corre en IO y
+// takeDamage muta estado Compose → carrera); (3) PLAYER_DAMAGE dispara miedo al combate
+// (npcAiManager.triggerFear). Se fusionó además el safeDisplayName que solo tenía el miembro. El
+// miembro fue borrado. Cascada: addRemoteEntity/updateNpcsState = ext únicas; takeDamage = miembro
+// público único; triggerFear vive en npcAiManager. (Activa bugfixes que antes no corrían → probar MP.)
 internal fun WorldMapViewModel.handleMultiplayerMessage(messageJson: String) {
         try {
             val msg = gson.fromJson(messageJson, ServerMessage::class.java)
@@ -195,7 +203,7 @@ internal fun WorldMapViewModel.handleMultiplayerMessage(messageJson: String) {
                         val isRemoteMoving = msg.action == "WALK" || msg.action == "RUN"
                         val isRemoteDriving = msg.isDriving == true
 
-                        val multiplayerConfig = ovh.gabrielhuav.pow.domain.models.CharacterVisualConfig(
+                        val multiplayerConfig = ovh.gabrielhuav.pow.domain.models.map.CharacterVisualConfig(
                             bodyFolder = "other_player",
                             bodyPrefix = "p_mult_",
                             hairId = 1,
@@ -205,12 +213,15 @@ internal fun WorldMapViewModel.handleMultiplayerMessage(messageJson: String) {
                         )
 
                         val remoteCarModel = try {
-                            msg.carModel?.let { ovh.gabrielhuav.pow.domain.models.CarModel.valueOf(it) }
-                                ?: ovh.gabrielhuav.pow.domain.models.CarModel.SEDAN
+                            msg.carModel?.let { ovh.gabrielhuav.pow.domain.models.map.CarModel.valueOf(it) }
+                                ?: ovh.gabrielhuav.pow.domain.models.map.CarModel.SEDAN
                         } catch(e: Exception) {
-                            ovh.gabrielhuav.pow.domain.models.CarModel.SEDAN
+                            ovh.gabrielhuav.pow.domain.models.map.CarModel.SEDAN
                         }
 
+                        // FIX (de-dup par 7, fusionado del miembro): displayName nunca blank, para
+                        // poder identificar jugadores remotos (antes el nombre vacío los hacía anónimos).
+                        val safeDisplayName = msg.displayName?.takeIf { it.isNotBlank() } ?: "Player_${msg.id.take(4)}"
                         val otherPlayer = Npc(
                             id = msg.id,
                             type = if (isRemoteDriving) NpcType.CAR else NpcType.PERSON,
@@ -223,7 +234,7 @@ internal fun WorldMapViewModel.handleMultiplayerMessage(messageJson: String) {
                             carModel = remoteCarModel,
                             carColor = msg.carColor ?: 0xFFFFFFFF.toInt(),
                             visualConfig = if (!isRemoteDriving) multiplayerConfig else null,
-                            displayName = msg.displayName,
+                            displayName = safeDisplayName,
                             health = msg.health ?: 100f,
                             isDying = (msg.health ?: 100f) <= 0f
                         )
@@ -238,19 +249,30 @@ internal fun WorldMapViewModel.handleMultiplayerMessage(messageJson: String) {
     }
 
 internal fun WorldMapViewModel.addRemoteEntity(remote: MultiplayerNpc) {
-        // Anti-duplicación: coche recién abordado por MÍ → ignorar reinserciones remotas
-        // (paridad con el miembro privado de WorldMapViewModel, que es el activo).
+        // DE-DUP (2026-06-21, par 4): sincronizado al MIEMBRO canónico de WorldMapViewModel.kt antes de
+        // borrarlo. El miembro REPLICA además rol de zombi + vida/estado de muerte (health/isDying/
+        // aggroUntil/zombieRole/maxHealth/screamUntil); esta extensión vieja NO lo hacía (los demás
+        // clientes no veían la barra de vida ni el rol de zombi remoto). Cascada segura: único call
+        // externo isCarTombstoned() es un miembro internal único (sin gemelo).
+        // Coche recién abordado por MÍ: ignorar reinserciones que lleguen del host remoto unos segundos.
         if (isCarTombstoned(remote.id)) return
         val npcType = try { NpcType.valueOf(remote.npcType) } catch(e: Exception) { NpcType.PERSON }
 
+        // Rol de zombi replicado: el maxHealth se DERIVA del rol (no viaja por el cable).
+        val zRole = try {
+            remote.zombieRole?.let { ovh.gabrielhuav.pow.domain.models.map.ZombieRole.valueOf(it) }
+                ?: ovh.gabrielhuav.pow.domain.models.map.ZombieRole.NORMAL
+        } catch (e: Exception) { ovh.gabrielhuav.pow.domain.models.map.ZombieRole.NORMAL }
+        val zMaxHealth = if (npcType == NpcType.ZOMBIE) NpcAiManager.maxHealthForRole(zRole) else 100f
+
         val cModel = try {
-            remote.carModel?.let { ovh.gabrielhuav.pow.domain.models.CarModel.valueOf(it) }
-                ?: ovh.gabrielhuav.pow.domain.models.CarModel.SEDAN
-        } catch (e: Exception) { ovh.gabrielhuav.pow.domain.models.CarModel.SEDAN }
+            remote.carModel?.let { ovh.gabrielhuav.pow.domain.models.map.CarModel.valueOf(it) }
+                ?: ovh.gabrielhuav.pow.domain.models.map.CarModel.SEDAN
+        } catch (e: Exception) { ovh.gabrielhuav.pow.domain.models.map.CarModel.SEDAN }
         val cColor = remote.carColor ?: 0xFFFFFFFF.toInt()
 
         val visualConfig = if (npcType == NpcType.PERSON) {
-            ovh.gabrielhuav.pow.domain.models.CharacterVisualConfig(
+            ovh.gabrielhuav.pow.domain.models.map.CharacterVisualConfig(
                 bodyFolder = "npc_walk_1",
                 bodyPrefix = "npc_walk_1_",
                 hairId = remote.hairId ?: 1,
@@ -278,12 +300,22 @@ internal fun WorldMapViewModel.addRemoteEntity(remote: MultiplayerNpc) {
             carModel = cModel,
             carColor = cColor,
             visualConfig = visualConfig,
-            displayName = null
+            displayName = null,
+            // Vida replicada del host: así los demás clientes ven la barra de vida y el estado de
+            // muerte del NPC (atropellos/golpes) igual que el host.
+            health = remote.health ?: 100f,
+            isDying = remote.isDying ?: false,
+            aggroUntil = remote.aggroUntil ?: 0L,
+            zombieRole = zRole,
+            maxHealth = zMaxHealth,
+            screamUntil = remote.screamUntil ?: 0L
         )
     }
 
 internal fun WorldMapViewModel.updateNpcsState() {
-        // Civiles/jugadores remotos + policía propia (simulada) + policía remota (solo render).
-        val combined = remoteEntities.values + policeManager.activeUnits() + remotePolice.values
+        // Civiles/jugadores remotos + policía propia (simulada) + policía remota (solo render)
+        // + policía de la CAMPAÑA (escolta de la Misión 1, clase aparte; ver WorldMapCampaignPolice.kt).
+        val combined = remoteEntities.values + policeManager.activeUnits() +
+            remotePolice.values + campaignEscortPolice.activeUnits() + mission2Crowd.values
         _uiState.update { it.copy(npcs = combined.toList()) }
     }

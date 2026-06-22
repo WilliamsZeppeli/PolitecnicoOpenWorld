@@ -15,8 +15,8 @@ import kotlinx.coroutines.launch
 import ovh.gabrielhuav.pow.data.local.room.PowDatabase
 import ovh.gabrielhuav.pow.data.repository.CollectibleRepository
 import ovh.gabrielhuav.pow.data.repository.SettingsRepository
-import ovh.gabrielhuav.pow.domain.models.ActiveCollectible
-import ovh.gabrielhuav.pow.domain.models.ShineCTOFloor
+import ovh.gabrielhuav.pow.domain.models.map.ActiveCollectible
+import ovh.gabrielhuav.pow.domain.models.map.ShineCTOFloor
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.PlayerAction
 import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.Direction
 import kotlin.math.abs
@@ -322,7 +322,7 @@ class ShineCTOViewModel(
                     description = "Dato curioso: El refresco de Shine CTO tiene fama de ser " +
                             "adictivo. Se dice que quien llega a la décima copa descubre el sabor " +
                             "secreto… aunque el precio lo paga el estómago.",
-                    assetPath = "collectibles/colec_shine.webp",
+                    assetPath = "SPRITES/COLLECTIBLES/colec_shine.webp",
                     latitude = 0.0,
                     longitude = 0.0
                 )

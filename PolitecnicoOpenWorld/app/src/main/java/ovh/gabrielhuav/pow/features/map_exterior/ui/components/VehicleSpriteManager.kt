@@ -5,7 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.util.LruCache
-import ovh.gabrielhuav.pow.domain.models.CarModel
+import ovh.gabrielhuav.pow.domain.models.map.CarModel
 import kotlin.math.roundToInt
 
 object VehicleSpriteManager {
@@ -33,7 +33,7 @@ object VehicleSpriteManager {
 
         if (modelFrames[frameIndex] == null) {
             val indexStr = frameIndex.toString().padStart(3, '0')
-            val fileName = "VEHICLES/${carModel.dirName}/${carModel.prefix}$indexStr.webp"
+            val fileName = "SPRITES/VEHICLES/${carModel.dirName}/${carModel.prefix}$indexStr.webp"
             try {
                 context.assets.open(fileName).use { inputStream ->
                     val drawable = Drawable.createFromStream(inputStream, fileName)

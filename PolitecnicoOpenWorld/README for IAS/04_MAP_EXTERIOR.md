@@ -1,17 +1,25 @@
 # 04 · Open World / `features/map_exterior/`
 
-**ES:** El corazón del juego. El `WorldMapViewModel` (Activity-scoped, ~2800 líneas) está **partido en
+**ES:** El corazón del juego. El `WorldMapViewModel` (Activity-scoped, ~2600 líneas) está **partido en
 extensiones** (`WorldMap*.kt`) que agrupan la lógica por tema. El estado es `WorldMapState`.
-**EN:** The game's heart. `WorldMapViewModel` (Activity-scoped, ~2800 lines) is **split into
+**EN:** The game's heart. `WorldMapViewModel` (Activity-scoped, ~2600 lines) is **split into
 extension partials** (`WorldMap*.kt`) grouping logic by topic. State is `WorldMapState`.
 
-> **Gotcha:** algunas funciones existen como **miembro privado** en `WorldMapViewModel.kt` *y* como
-> **extensión** en un parcial con el mismo nombre (p. ej. `startGameLoop`, `updateVisibleRoads`,
-> `handleMultiplayerMessage`). En Kotlin el **miembro gana** sobre la extensión. La implementación
-> canónica/activa es la de `WorldMapViewModel.kt`; los parciales agrupan lógica y helpers `internal`.
-> Verifica ambos al editar. / Some functions exist both as a private member in `WorldMapViewModel.kt`
-> and as a same-named extension in a partial. Kotlin's **member wins**; the canonical impl is in
-> `WorldMapViewModel.kt`. Check both when editing.
+> **🆕 Refactor de tamaño (2026-06-20):** se extrajeron 4 parciales nuevos del VM (bajó de ~3050 a
+> ~2600 líneas): `WorldMapCombat.kt` (combate), `WorldMapCampaign.kt` (`setStorySpawn`),
+> `WorldMapTeleport.kt` (teleport + Metro/Metrobús) y `WorldMapShineCTO.kt` (easter egg + fade de
+> puerta). Todas tocan SOLO miembros `internal`/`public`; el ESTADO sigue en el VM. Los call-sites
+> fuera del paquete `viewmodel` (MainActivity, WorldMapScreen) llevan import explícito. Ver 09 §0.
+
+> **Gotcha (patrón histórico — los gemelos concretos YA se de-duplicaron el 2026-06-21):** en Kotlin,
+> si una función existe como **miembro privado** en `WorldMapViewModel.kt` Y como **extensión** del mismo
+> nombre en un parcial, el **miembro GANA** y la extensión queda muerta. Los 8 gemelos que había
+> (`startGameLoop`, `updateVisibleRoads`, `handleMultiplayerMessage`, `addRemoteEntity`,
+> `maybeRefetchRoadNetwork`, `triggerWastedSequence`, `spawnOustedDriver`, `updateDestinationRoute`) ya
+> se resolvieron (ver `09 §12` y 09 §0/§12): cada función tiene UNA sola implementación
+> viva. **El patrón sigue existiendo** (los parciales son extensiones), así que si creas una función
+> nueva NO la dupliques como miembro+extensión. / The member-vs-extension twin pattern: member wins,
+> extension dies. The 8 twins that existed were all de-duplicated on 2026-06-21 (see `09 §12`).
 
 ---
 
@@ -23,18 +31,33 @@ extension partials** (`WorldMap*.kt`) grouping logic by topic. State is `WorldMa
 | Proveedores de mapa + descarga/compuertas de tiles | `viewmodel/WorldMapProviders.kt` (NUEVO, refactor) |
 | Modo Diseñador / landmarks (Room, edición, import/export) | `viewmodel/WorldMapDesigner.kt` (NUEVO, refactor) |
 | Nivel de búsqueda + policía propia + carjack | `viewmodel/WorldMapWanted.kt` (NUEVO, refactor) |
+| 🆕 Combate (melee jugador, atropello, daño contacto NPC/zombi, implacable) | `viewmodel/WorldMapCombat.kt` (NUEVO, refactor) |
+| 🆕 Campaña/Modo Historia: punto de entrada del spawn (`setStorySpawn`) | `viewmodel/WorldMapCampaign.kt` (NUEVO, refactor) |
+| 🆕 Teletransporte: gate de TP + estaciones Metro/Metrobús | `viewmodel/WorldMapTeleport.kt` (NUEVO, refactor) |
+| 🆕 Easter egg ShineCTO + fade de puerta ESCOM | `viewmodel/WorldMapShineCTO.kt` (NUEVO, refactor) |
 | 🆕 Guardado/carga de partida (Modo Historia, JSON) | `viewmodel/WorldMapSaveGame.kt` + `data/repository/SaveGameRepository.kt` |
 | 🆕 Editor del Debug Interiores (líneas rojas/verdes/naranjas) | `viewmodel/WorldMapDebugEditor.kt` + `ui/components/InteriorDebugEditorPanel.kt` |
 | Estado UI / UI state | `viewmodel/WorldMapState.kt` |
-| Game loop (parcial) | `viewmodel/WorldMapGameLoop.kt` |
+| Game loop | `WorldMapViewModel.startGameLoop()` (MIEMBRO; `viewmodel/WorldMapGameLoop.kt` = tombstone tras de-dup 2026-06-21) |
 | Multiplayer relay/parse | `viewmodel/WorldMapMultiplayer.kt` (+ `WorldMapMultiplayerModels.kt`) |
 | Red de calles / road network | `viewmodel/WorldMapRoadNetwork.kt` |
 | Routing / waypoints | `viewmodel/WorldMapRouting.kt` |
 | ESCOM (puertas, ousted driver) | `viewmodel/WorldMapEscom.kt` |
 | Coleccionables (lógica) | `viewmodel/WorldMapCollectiblesLogic.kt` |
 | Misc (movimiento, WASTED, HUD vida) | `viewmodel/WorldMapMisc.kt` |
-| Render principal (OSM/Google/Leaflet) | `ui/WorldMapScreen.kt` |
+| 🆕 Cámara/zoom (auto/manual, pinch, pan) + toggles de widgets | `viewmodel/WorldMapCameraUi.kt` (NUEVO, refactor — extensiones) |
+| 🆕 Ajustes (densidad/LOD NPCs) + skin | `viewmodel/WorldMapSettings.kt` (NUEVO, refactor — extensiones) |
+| Render principal (selector de renderer: OSM/Google/Web) | `ui/WorldMapScreen.kt` (~1325) |
+| 🆕 Rama de render Google Maps nativo (`GoogleMapLayer`) | `ui/WorldMapScreenGoogle.kt` (NUEVO, refactor — composable top-level; cachés LRU por parámetro) |
+| 🆕 Rama de render WEB / Leaflet en WebView (`WebMapLayer`) | `ui/WorldMapScreenWeb.kt` (NUEVO, refactor — composable top-level; cachés base64 + holders de guarda por-frame por parámetro) |
+| 🆕 Overlays/diálogos superpuestos (WASTED, vídeo zombi, prompts, diálogo Prankedy, popup coleccionable, fades puerta ESCOM/metro/metrobús) | `ui/WorldMapScreenOverlays.kt` (NUEVO, refactor) |
+| 🆕 Controles en pantalla (D-pad/joystick/acciones, conducción, salir apocalipsis, pulsación larga Y/△) | `ui/WorldMapScreenControls.kt` (NUEVO, refactor — `BoxScope.WorldMapControls`) |
 | Render nativo osmdroid (fog, over-zoom, NPCs, landmarks) | `ui/NativeOsmMap.kt` |
+| 🆕 Render de Prankedy en OSM nativo (+ proyectil) | `ui/NativeOsmMapPrankedy.kt` (NUEVO, refactor — `renderPrankedyOnMap`) |
+| 🆕 Overlay de neblina (fog of war) OSM nativo | `ui/NativeOsmMapFog.kt` (NUEVO, refactor — `class FogOverlay`) |
+| 🆕 Entrada a interiores data-driven (puerta→ruta) | `domain/models/InteriorEntryCatalog.kt` (NUEVO; lo usa `handleInteraction`) |
+| 🆕 IA de NPCs: movers zombi/policía, aggro, seguimiento, distancia | `domain/models/ai/NpcAiManagerMovement.kt` (NUEVO, refactor — extensiones de `NpcAiManager`) |
+| 🆕 IA de NPCs: movers de calles/campus (`moveNpc`/`moveLocalNpc`: tráfico, compromiso de intersección, esquive, parking, navGraph) | `domain/models/ai/NpcAiManagerTraffic.kt` (NUEVO, refactor — extensiones de `NpcAiManager`) |
 | HTML de Leaflet (WebView) | `ui/WorldMapLeafletHtml.kt` |
 | Intercepción de tiles Leaflet | `ui/CachingWebViewClient.kt` |
 | Helpers de dibujo / health bar | `ui/WorldMapDrawingUtils.kt` |
@@ -66,8 +89,9 @@ data class PoliceShot(from: GeoPoint, to: GeoPoint, at: Long)
 - **Mapa/carga:** `currentLocation, isLoadingLocation, zoomLevel, mapProvider, pendingProvider,
   pendingProviderReady, isMapReady, mapLoadProgress, roadSource, tileSource, isRoadNetworkReady`.
 - **Render flags:** `showCacheWidget(=true), showFpsWidget, showZoomWidget (widget de nivel de zoom,
-  Ajustes→Interfaz), showSpeedometer (=true; velocímetro km/h, solo al conducir), showRoadNetwork,
-  isUserPanningMap`.
+  Ajustes→Interfaz), showSpeedometer (=true; velocímetro km/h, solo al conducir), showCoordsWidget
+  (widget de coordenadas X/Y/Z, Ajustes→Interfaz, default oculto; X=lon, Y=lat, Z="GLOBAL"),
+  showRoadNetwork, isUserPanningMap`.
 - **Zoom por estado (constantes en `WorldMapState.kt`):** `ZOOM_ON_FOOT=22`, `ZOOM_DRIVING=21`,
   `ZOOM_DRIVING_FAST=20` (≥85% de MAX_SPEED baja a 20; histéresis al 65%). `updateAutoZoom()` corre
   cada tick del game loop y solo actúa en TRANSICIONES de modo (el pinch manual se respeta).
@@ -105,7 +129,7 @@ load roads (Room cache → else Overpass with exponential backoff 1s→30s). The
 1. ESCOM sync: dentro de ESCOM + red lista → `spawnEscomItems` (ya **NO** spawnea la mano; solo marca el flag); fuera → limpia.
 2. cada 30 ticks → trySpawningCollectible; siempre → checkCollectibleProximity, checkDestinationArrival.
 3. cada 30 ticks (si hay marker) → updateDestinationRoute.
-4. si playerAction==SPECIAL → performPlayerAttack (golpe a NPCs Y jugadores remotos, ATTACK_RADIUS=0.00022 ~24 m).
+4. si playerAction==SPECIAL → performPlayerAttack (golpe a NPCs Y jugadores remotos, ATTACK_RADIUS=0.00008 ~9 m, cuerpo a cuerpo).
    Si golpea a un jugador remoto, envía `PLAYER_ATTACK_HIT { targetId, damage }` al servidor.
 5. si isDriving && !WASTED → física del coche:
      girar ±2°/tick (solo con velocidad), gas→+ACCELERATION (cap MAX_SPEED), freno→-BRAKING_FRICTION
@@ -122,7 +146,7 @@ load roads (Room cache → else Overpass with exponential backoff 1s→30s). The
      → enviar PLAYER_UPDATE; si Host: NPC_DESTROY de despawns + NPC_BATCH_UPDATE de NPCs activos (dist<=0.0012)
 ```
 Constantes del VM / VM constants: `MAX_SPEED=0.000017`, `ACCELERATION=0.0000003`,
-`BRAKING_FRICTION=0.000001`, `ATTACK_RADIUS=0.00022`, `RUN_OVER_RADIUS=0.00003`,
+`BRAKING_FRICTION=0.000001`, `ATTACK_RADIUS=0.00008`, `RUN_OVER_RADIUS=0.00003`,
 `NPC_CONTACT_COOLDOWN_MS=900`, `RELENTLESS_HIT_STREAK=6`, `CELL=0.0025` (grid de snap-to-road). El loop está envuelto en
 try/catch (relanza `CancellationException`, traga el resto para no crashear). / Loop wrapped in
 try/catch (rethrows cancellation, swallows the rest).
@@ -235,6 +259,12 @@ o **Web** (WebView + Leaflet con HTML de `WorldMapLeafletHtml`). El **fog Compos
 usa para Google nativo** (OSM nativo y web tienen su propio fog). / Compose `Canvas` fog is used
 **only** for the Google native renderer.
 
+> **🆕 Refactor (2026-06-20):** los overlays/diálogos superpuestos (pantalla WASTED, vídeo zombi,
+> prompts de interacción, diálogo de Prankedy, popup de coleccionable y los fades de puerta ESCOM/
+> metro/metrobús) se extrajeron al composable `WorldMapOverlays` en `ui/WorldMapScreenOverlays.kt`
+> (mismo paquete). `WorldMapScreen` ahora solo los invoca (`WorldMapOverlays(uiState, viewModel,
+> onNavigateToInterior)`). MVVM intacto. Ver 09 §0.
+
 > **Culling de NPCs = borde del fog:** `NPC_CULL_MARGIN_M=0` (antes 15) → los 3 renderers (que usan
 > `npcVisionRadiusMeters() = NPC_FOG_VISION_METERS + margen`) dibujan civiles SOLO dentro de los 70 m del
 > fog (antes hasta 85 m → "veo NPCs fuera del fog"). Policía fuera del fog = waypoint 🚓 (`wantedLevel>0`),
@@ -288,7 +318,7 @@ balanceo + parámetros volátiles) hasheada con SHA-256. Permite juego offline e
   `updatePrankedyProjectile` en `WorldMapLeafletHtml`, base64 por frame empujado desde `WorldMapScreen`).
   Google nativo = pendiente. IA/comportamiento → ver 03.
 - **🆕 Línea GPS de campaña (Modo Historia):** ruta A* `findRoadRoute(ENCB, ESCOM)` (en `WorldMapRouting.kt`,
-  sobre la red vial) → `WorldMapState.campaignRouteWaypoints`, dibujada como **`Polyline` ROJA** en OSM nativo
+  sobre la red vial) → `WorldMapState.campaignRouteWaypoints`, dibujada como **`Polyline` VERDE VIVO (`#00E676`, gruesa)** en OSM nativo
   (`NativeOsmMap`, tag `route_overlay_tag+900`, `overlays.add(0,…)` → sobre teselas, bajo personajes/HUD) y en
   web (JS `updateCampaignRoute` en `WorldMapLeafletHtml`). La activa `maybeSpawnPrankedyCompanion` y la oculta
   `maybeHideCampaignRouteNearEscom` (~100 m de ESCOM) en `WorldMapPrankedy.kt`. Google nativo = pendiente. Ver 07.
@@ -312,7 +342,7 @@ in multiplayer. Zombie models + AI → see **03**.
 - **🆕 EDITOR del Debug Interiores (`WorldMapDebugEditor.kt` + `InteriorDebugEditorPanel.kt`):** con el overlay activo aparece una **barra horizontal abajo** (los controles de movimiento se **ocultan** al editar) para **EDITAR** las líneas **DIBUJANDO con el dedo** (estilo Paint): eliges herramienta `DebugEditTool` (WALL=barda roja, BLOCK=zona roja, NAV_PED=verde peatonal, NAV_CAR=naranja autos) y **arrastras** sobre el mapa → línea (WALL/NAV_*) o rectángulo (BLOCK); con herramienta activa el mapa NO panea (touch consumido), con `NONE` vuelve a panear. **Deshacer** (último trazo) / **Limpiar** / **Exportar/Importar JSON** (formato `exterior_collisions.json` + sección `navPaths`). El dibujo es una **capa Compose sobre el mapa** (`InteriorDebugDrawSurface`, en `WorldMapScreen`) que funciona con **cualquier renderer** (web/OSM/Google) — clave porque el proveedor por defecto es WEB (Leaflet): captura el gesto desde el `ACTION_DOWN` (`awaitEachGesture`+`consume()`) para que el mapa NO panee, convierte pantalla↔geo con Web Mercator (`256·densidad·2^zoom`, centro = jugador) y commitea con `commitDebugStroke`. En modo debug el mapa **se mantiene centrado en el jugador** (la capa asume ese centro). Estado nuevo en `WorldMapState`: `debugEditTool`, `debugEditWalls`, `debugEditBlocks`, `debugEditNavPed`, `debugEditNavCar`.
 - **🆕 Guardado de partida (Modo Historia):** API del VM en `WorldMapSaveGame.kt` (`saveGame`/`loadGame`/`buildSaveData`/`restoreSaveData`) + `SaveGameRepository` (JSON). Campos del VM `campaignSchoolId`/`inCampaign`. Ver 07/09. **Fix de `setStorySpawn`:** ahora se comporta como un teletransporte (`gateMapDownloadAfterTeleport()` + reset de `lastNetworkFetchLocation`/`lastFetchAttemptMs`/`npcWarmupCycles`) para que "COMENZAR/CARGAR" SÍ carguen y suelten al jugador (antes `prepareMapForEntry`, idempotente por `mapPrepStarted`, dejaba la 2ª entrada cargando para siempre). Ver 09.
 - **VM API:** `toggleGlobalZombieMode()` (flip + broadcast `ZOMBIE_MODE_SET`), `exitGlobalZombieMode()`.
-- **Daño al jugador (¡crítico!):** los zombis muerden vía `applyNpcContactDamage(location)` y el atropello vía `runOverNpcs(finalLoc, speed)`. **Estas dos llamadas viven en el game loop MIEMBRO de `WorldMapViewModel.kt`** (el activo). La extensión `WorldMapGameLoop.kt` también las tiene pero está **sombreada/muerta** — editar solo el miembro (ver 09).
+- **Daño al jugador (¡crítico!):** los zombis muerden vía `applyNpcContactDamage(location)` y el atropello vía `runOverNpcs(finalLoc, speed)`. **Viven en el game loop, que es el MIEMBRO `startGameLoop()` de `WorldMapViewModel.kt`.** (2026-06-21: el gemelo de `WorldMapGameLoop.kt` se de-duplicó — ese archivo es ahora un **tombstone**; `startGameLoop` es solo miembro, e incluye además el **audio** fusionado: caminar/correr/coche/zombi.) Editar el game loop = editar el miembro en `WorldMapViewModel.kt`.
 - **Multijugador:** el Host simula los zombis y los replica por `NPC_BATCH_UPDATE` (conserva `npcType=ZOMBIE` + health/isDying). El toggle viaja en `ZOMBIE_MODE_SET` (global) — relayado por `Multiplayer/server.js` (NO por `MultiplayerInteriores/`). `addRemoteEntity` reconstruye el zombi remoto con `visualConfig=null` y `speed=PERSON_SPEED` (animan). Ver **08**.
 
 ### Render del zombi / zombie rendering (3 renderers)

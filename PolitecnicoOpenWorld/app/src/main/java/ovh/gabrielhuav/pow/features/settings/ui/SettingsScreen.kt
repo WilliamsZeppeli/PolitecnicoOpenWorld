@@ -1,6 +1,9 @@
 package ovh.gabrielhuav.pow.features.settings.ui
 
 import android.content.res.Configuration
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.BorderStroke
@@ -9,8 +12,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -42,6 +48,10 @@ fun SettingsScreen(
     onFpsToggled: (Boolean) -> Unit,
     onZoomWidgetToggled: (Boolean) -> Unit,
     onSpeedometerToggled: (Boolean) -> Unit,
+    onCoordsWidgetToggled: (Boolean) -> Unit,
+    onDeveloperModeToggled: (Boolean) -> Unit,
+    onMusicVolumeChanged: (Float) -> Unit,
+    onSfxVolumeChanged: (Float) -> Unit,
     onRoadNetworkToggled: (Boolean) -> Unit,
     onSaveClicked: () -> Unit,
     onControlTypeChanged: (ControlType) -> Unit,
@@ -50,8 +60,11 @@ fun SettingsScreen(
     onNpcDensityChanged: (Float) -> Unit,
     onNpcEmojiLodToggled: (Boolean) -> Unit,
     onNpcFullEmojiToggled: (Boolean) -> Unit,
+    onOptimizeForDevice: () -> Unit = {},
     onNavigateBack: () -> Unit,
     onExitToMainMenu: () -> Unit,
+    authManager: ovh.gabrielhuav.pow.data.auth.AuthManager? = null,
+    onAccountDeleted: () -> Unit = {},
     currentLanguage: String = "",
     onLanguageChanged: (String) -> Unit = {}
 ) {
@@ -63,9 +76,16 @@ fun SettingsScreen(
 
     Column(modifier = Modifier.fillMaxSize().background(bg).systemBarsPadding()) {
 
+        val configuration = LocalConfiguration.current
+        val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+        // En HORIZONTAL sobre pantallas BAJAS (lado corto pequeño, ≤380 dp) el cromo de tamaño fijo se
+        // ve apretado: activamos un modo COMPACTO que reduce paddings/spacers/fuentes del menú de
+        // Configuración. Solo afecta a horizontal en pantallas chicas; vertical y horizontal grande quedan igual.
+        val compactLand = !isPortrait && configuration.screenHeightDp <= 380
+
         // Barra Superior
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(if (compactLand) 8.dp else 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onNavigateBack) {
@@ -74,7 +94,7 @@ fun SettingsScreen(
             Text(
                 text = stringResource(R.string.settings_title),
                 color = Color(0xFFD4AF37),
-                fontSize = 20.sp,
+                fontSize = if (compactLand) 16.sp else 20.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 2.sp,
                 modifier = Modifier.padding(start = 8.dp)
@@ -82,9 +102,6 @@ fun SettingsScreen(
         }
 
         Row(modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 16.dp, vertical = 8.dp)) {
-            val configuration = LocalConfiguration.current
-            val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
-
             if (isPortrait) {
                 // DISEÑO VERTICAL (PORTRAIT)
                 Column(modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -94,7 +111,7 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val categories = listOf(SettingsCategory.Map, SettingsCategory.Controls, SettingsCategory.Gameplay, SettingsCategory.Interface)
+                        val categories = listOf(SettingsCategory.Map, SettingsCategory.Controls, SettingsCategory.Gameplay, SettingsCategory.Interface, SettingsCategory.Audio, SettingsCategory.Account)
                         categories.forEach { category ->
                             CategoryItemHorizontal(
                                 category = category,
@@ -119,44 +136,58 @@ fun SettingsScreen(
                     ) {
                         Text(stringResource(state.selectedCategory.titleRes).uppercase(), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         Spacer(modifier = Modifier.height(24.dp))
-                        SettingsContent(state, onMapProviderChanged, onCacheToggled, onFpsToggled, onZoomWidgetToggled, onSpeedometerToggled, onSaveClicked, onControlTypeChanged, onControlsScaleChanged, onSwapControlsToggled, onRoadNetworkToggled, onNpcDensityChanged, onNpcEmojiLodToggled, onNpcFullEmojiToggled, currentLanguage, onLanguageChanged)
+                        SettingsContent(state, onMapProviderChanged, onCacheToggled, onFpsToggled, onZoomWidgetToggled, onSpeedometerToggled, onCoordsWidgetToggled, onDeveloperModeToggled, onMusicVolumeChanged, onSfxVolumeChanged, onSaveClicked, onControlTypeChanged, onControlsScaleChanged, onSwapControlsToggled, onRoadNetworkToggled, onNpcDensityChanged, onNpcEmojiLodToggled, onNpcFullEmojiToggled, onOptimizeForDevice, authManager, onAccountDeleted, currentLanguage, onLanguageChanged)
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Botón de Salir abajo
-                    OutlinedButton(
+                    // Botón "VOLVER" abajo (mismo diseño que coleccionables / Modo Historia)
+                    val backShape = CutCornerShape(topStart = 16.dp, bottomEnd = 16.dp)
+                    Button(
                         onClick = onExitToMainMenu,
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFD32F2F)),
-                        border = BorderStroke(1.dp, Color(0xFFD32F2F).copy(alpha = 0.5f))
+                        shape = backShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF6B1C3A),
+                            contentColor = Color.White
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .padding(bottom = 8.dp)
+                            .shadow(elevation = 8.dp, shape = backShape)
                     ) {
-                        Text(stringResource(R.string.settings_exit_to_menu), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.menu_back), fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                     }
                 }
             } else {
-                // DISEÑO HORIZONTAL (LANDSCAPE)
-                Row(modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 16.dp, vertical = 8.dp)) {
+                // DISEÑO HORIZONTAL (LANDSCAPE). En pantallas bajas se compacta (compactLand).
+                Row(modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = if (compactLand) 8.dp else 16.dp, vertical = if (compactLand) 2.dp else 8.dp)) {
                     Column(modifier = Modifier.weight(0.3f).fillMaxHeight().verticalScroll(sidebarScrollState)) {
-                        val categories = listOf(SettingsCategory.Map, SettingsCategory.Controls, SettingsCategory.Gameplay, SettingsCategory.Interface)
+                        val categories = listOf(SettingsCategory.Map, SettingsCategory.Controls, SettingsCategory.Gameplay, SettingsCategory.Interface, SettingsCategory.Audio, SettingsCategory.Account)
                         categories.forEach { category ->
-                            CategoryItem(category = category, isSelected = state.selectedCategory == category, onClick = { onCategorySelected(category) })
+                            CategoryItem(category = category, isSelected = state.selectedCategory == category, onClick = { onCategorySelected(category) }, compact = compactLand)
                         }
-                        Spacer(modifier = Modifier.height(32.dp))
-                        OutlinedButton(
+                        Spacer(modifier = Modifier.height(if (compactLand) 10.dp else 32.dp))
+                        val backShape = CutCornerShape(topStart = 16.dp, bottomEnd = 16.dp)
+                        Button(
                             onClick = onExitToMainMenu,
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFD32F2F)),
-                            border = BorderStroke(1.dp, Color(0xFFD32F2F).copy(alpha = 0.5f))
-                        ) { Text(stringResource(R.string.settings_exit_to_menu), fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                            shape = backShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF6B1C3A),
+                                contentColor = Color.White
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(if (compactLand) 42.dp else 56.dp)
+                                .padding(bottom = if (compactLand) 6.dp else 16.dp)
+                                .shadow(elevation = 8.dp, shape = backShape)
+                        ) { Text(stringResource(R.string.menu_back), fontSize = if (compactLand) 12.sp else 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp) }
                     }
 
-                    Column(modifier = Modifier.weight(0.7f).fillMaxHeight().padding(start = 24.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF1A0A10)).border(1.dp, Color(0xFFD4AF37).copy(alpha = 0.4f), RoundedCornerShape(12.dp)).padding(24.dp).verticalScroll(contentScrollState)) {
-                        Text(stringResource(state.selectedCategory.titleRes).uppercase(), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        Spacer(modifier = Modifier.height(24.dp))
-                        SettingsContent(state, onMapProviderChanged, onCacheToggled, onFpsToggled, onZoomWidgetToggled, onSpeedometerToggled, onSaveClicked, onControlTypeChanged, onControlsScaleChanged, onSwapControlsToggled, onRoadNetworkToggled, onNpcDensityChanged, onNpcEmojiLodToggled, onNpcFullEmojiToggled, currentLanguage, onLanguageChanged)
+                    Column(modifier = Modifier.weight(0.7f).fillMaxHeight().padding(start = if (compactLand) 12.dp else 24.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF1A0A10)).border(1.dp, Color(0xFFD4AF37).copy(alpha = 0.4f), RoundedCornerShape(12.dp)).padding(if (compactLand) 12.dp else 24.dp).verticalScroll(contentScrollState)) {
+                        Text(stringResource(state.selectedCategory.titleRes).uppercase(), fontSize = if (compactLand) 15.sp else 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Spacer(modifier = Modifier.height(if (compactLand) 10.dp else 24.dp))
+                        SettingsContent(state, onMapProviderChanged, onCacheToggled, onFpsToggled, onZoomWidgetToggled, onSpeedometerToggled, onCoordsWidgetToggled, onDeveloperModeToggled, onMusicVolumeChanged, onSfxVolumeChanged, onSaveClicked, onControlTypeChanged, onControlsScaleChanged, onSwapControlsToggled, onRoadNetworkToggled, onNpcDensityChanged, onNpcEmojiLodToggled, onNpcFullEmojiToggled, onOptimizeForDevice, authManager, onAccountDeleted, currentLanguage, onLanguageChanged)
                     }
                 }
             }
@@ -191,17 +222,17 @@ private fun CategoryItemHorizontal(category: SettingsCategory, isSelected: Boole
 }
 
 @Composable
-private fun CategoryItem(category: SettingsCategory, isSelected: Boolean, onClick: () -> Unit) {
+private fun CategoryItem(category: SettingsCategory, isSelected: Boolean, onClick: () -> Unit, compact: Boolean = false) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(8.dp))
+        modifier = Modifier.fillMaxWidth().padding(vertical = if (compact) 2.dp else 4.dp).clip(RoundedCornerShape(8.dp))
             .clickable { onClick() }
             .background(if (isSelected) Color(0xFF6B1C3A) else Color.Transparent)
-            .padding(12.dp),
+            .padding(horizontal = if (compact) 10.dp else 12.dp, vertical = if (compact) 7.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(category.icon, contentDescription = null, tint = if (isSelected) Color.White else Color.Gray)
-        Spacer(Modifier.width(12.dp))
-        Text(stringResource(category.titleRes), color = if (isSelected) Color.White else Color.Gray, fontWeight = FontWeight.SemiBold)
+        Icon(category.icon, contentDescription = null, tint = if (isSelected) Color.White else Color.Gray, modifier = Modifier.size(if (compact) 18.dp else 24.dp))
+        Spacer(Modifier.width(if (compact) 8.dp else 12.dp))
+        Text(stringResource(category.titleRes), color = if (isSelected) Color.White else Color.Gray, fontWeight = FontWeight.SemiBold, fontSize = if (compact) 13.sp else androidx.compose.ui.unit.TextUnit.Unspecified)
     }
 }
 @Composable
@@ -212,6 +243,10 @@ private fun SettingsContent(
     onFpsToggled: (Boolean) -> Unit,
     onZoomWidgetToggled: (Boolean) -> Unit,
     onSpeedometerToggled: (Boolean) -> Unit,
+    onCoordsWidgetToggled: (Boolean) -> Unit,
+    onDeveloperModeToggled: (Boolean) -> Unit,
+    onMusicVolumeChanged: (Float) -> Unit,
+    onSfxVolumeChanged: (Float) -> Unit,
     onSaveClicked: () -> Unit,
     onControlTypeChanged: (ControlType) -> Unit,
     onControlsScaleChanged: (Float) -> Unit,
@@ -220,6 +255,9 @@ private fun SettingsContent(
     onNpcDensityChanged: (Float) -> Unit,
     onNpcEmojiLodToggled: (Boolean) -> Unit,
     onNpcFullEmojiToggled: (Boolean) -> Unit,
+    onOptimizeForDevice: () -> Unit,
+    authManager: ovh.gabrielhuav.pow.data.auth.AuthManager?,
+    onAccountDeleted: () -> Unit,
     currentLanguage: String,
     onLanguageChanged: (String) -> Unit
 ) {
@@ -229,8 +267,10 @@ private fun SettingsContent(
             state.showRoadNetwork, onRoadNetworkToggled
         )
         is SettingsCategory.Controls -> ControlsSettingsConfig(state.tempControlType, state.tempControlsScale, state.tempSwapControls, onControlTypeChanged, onControlsScaleChanged, onSwapControlsToggled, onSaveClicked)
-        is SettingsCategory.Gameplay -> GameplaySettings(state.npcDensity, onNpcDensityChanged, state.npcEmojiLod, onNpcEmojiLodToggled, state.npcFullEmoji, onNpcFullEmojiToggled)
-        is SettingsCategory.Interface -> DiagnosticWidgetsSetting(state.showCacheWidget, state.showFpsWidget, state.showZoomWidget, state.showSpeedometer, onCacheToggled, onFpsToggled, onZoomWidgetToggled, onSpeedometerToggled, currentLanguage, onLanguageChanged)
+        is SettingsCategory.Gameplay -> GameplaySettings(state.npcDensity, onNpcDensityChanged, state.npcEmojiLod, onNpcEmojiLodToggled, state.npcFullEmoji, onNpcFullEmojiToggled, onOptimizeForDevice)
+        is SettingsCategory.Interface -> DiagnosticWidgetsSetting(state.showCacheWidget, state.showFpsWidget, state.showZoomWidget, state.showSpeedometer, state.showCoordsWidget, state.developerMode, onCacheToggled, onFpsToggled, onZoomWidgetToggled, onSpeedometerToggled, onCoordsWidgetToggled, onDeveloperModeToggled, currentLanguage, onLanguageChanged)
+        is SettingsCategory.Audio -> AudioSettings(state.musicVolume, state.sfxVolume, onMusicVolumeChanged, onSfxVolumeChanged)
+        is SettingsCategory.Account -> AccountSettings(authManager, onAccountDeleted)
         else -> Text(stringResource(R.string.settings_none_available), color = Color.Gray)
     }
 }
@@ -242,9 +282,24 @@ private fun GameplaySettings(
     npcEmojiLod: Boolean,
     onNpcEmojiLodToggled: (Boolean) -> Unit,
     npcFullEmoji: Boolean,
-    onNpcFullEmojiToggled: (Boolean) -> Unit
+    onNpcFullEmojiToggled: (Boolean) -> Unit,
+    onOptimizeForDevice: () -> Unit
 ) {
     Column {
+        // ─── Preset de UN TOQUE: optimizar para gama baja ────────────────────
+        // Aplica de golpe los 3 ajustes ligeros (densidad mínima + ambos emoji).
+        Button(
+            onClick = onOptimizeForDevice,
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6B1C3A), contentColor = Color.White),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.settings_optimize_device), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(stringResource(R.string.settings_optimize_device_desc), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+        Spacer(Modifier.height(20.dp))
+
         // ─── Densidad de NPCs ────────────────────────────────────────────────
         Text(stringResource(R.string.settings_npc_count), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
@@ -563,15 +618,156 @@ private fun LanguageSetting(current: String, onChanged: (String) -> Unit) {
 }
 
 @Composable
+private fun AudioSettings(
+    musicVolume: Float,
+    sfxVolume: Float,
+    onMusicVolumeChanged: (Float) -> Unit,
+    onSfxVolumeChanged: (Float) -> Unit
+) {
+    Column {
+        // ─── Volumen de música ───────────────────────────────────────────────
+        Text(stringResource(R.string.settings_music_volume), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        Text("${(musicVolume * 100).toInt()}%", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+        Spacer(Modifier.height(8.dp))
+        Slider(
+            value = musicVolume,
+            onValueChange = onMusicVolumeChanged,
+            valueRange = 0f..1f,
+            colors = SliderDefaults.colors(thumbColor = Color(0xFFD4AF37), activeTrackColor = Color(0xFF6B1C3A))
+        )
+
+        Spacer(Modifier.height(24.dp))
+
+        // ─── Volumen de efectos ──────────────────────────────────────────────
+        Text(stringResource(R.string.settings_sfx_volume), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        Text("${(sfxVolume * 100).toInt()}%", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+        Spacer(Modifier.height(8.dp))
+        Slider(
+            value = sfxVolume,
+            onValueChange = onSfxVolumeChanged,
+            valueRange = 0f..1f,
+            colors = SliderDefaults.colors(thumbColor = Color(0xFFD4AF37), activeTrackColor = Color(0xFF6B1C3A))
+        )
+    }
+}
+
+// ─── CUENTA / AUTENTICACIÓN (Google Sign-In) ──────────────────────────────────
+// Inicio/cierre de sesión y ELIMINACIÓN de cuenta (obligatorio en Play Store).
+// El juego local y el Modo Historia NO requieren sesión; solo el multijugador la exige.
+@Composable
+private fun AccountSettings(
+    authManager: ovh.gabrielhuav.pow.data.auth.AuthManager?,
+    onAccountDeleted: () -> Unit
+) {
+    val context = LocalContext.current
+    var signedIn by remember { mutableStateOf(authManager?.isSignedIn() == true) }
+    var accountLabel by remember { mutableStateOf(authManager?.currentEmail() ?: authManager?.currentDisplayName()) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    val signInLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        authManager?.handleSignInResult(result.data) { ok, err ->
+            if (ok) {
+                signedIn = true
+                accountLabel = authManager.currentEmail() ?: authManager.currentDisplayName()
+            } else if (!err.isNullOrBlank()) {
+                // err == null = el usuario canceló el selector → sin aviso.
+                Toast.makeText(context, err, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text(stringResource(R.string.settings_account_desc), color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, textAlign = TextAlign.Justify)
+
+        if (signedIn) {
+            Text(
+                stringResource(R.string.settings_account_signed_in_as, accountLabel ?: ""),
+                color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold
+            )
+            OutlinedButton(
+                onClick = { authManager?.signOut { signedIn = false; accountLabel = null } },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                border = BorderStroke(1.dp, Color(0xFF6B1C3A))
+            ) { Text(stringResource(R.string.settings_account_sign_out)) }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Botón DESTRUCTIVO: elimina la cuenta de Firebase y los datos locales.
+            Button(
+                onClick = { showDeleteConfirm = true },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C))
+            ) { Text(stringResource(R.string.settings_account_delete), color = Color.White, fontWeight = FontWeight.Bold) }
+        } else {
+            Text(stringResource(R.string.settings_account_not_signed_in), color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
+            Button(
+                onClick = { authManager?.let { signInLauncher.launch(it.signInIntent()) } },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1565C0))
+            ) { Text(stringResource(R.string.settings_account_sign_in), color = Color.White, fontWeight = FontWeight.Bold) }
+        }
+
+        // Enlace a la política de privacidad pública (siempre visible; requisito de Play Store).
+        val privacyUrl = stringResource(R.string.settings_privacy_url)
+        TextButton(
+            onClick = {
+                try {
+                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(privacyUrl)))
+                } catch (_: Exception) {}
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text(stringResource(R.string.settings_account_privacy), color = Color(0xFFD4AF37)) }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text(stringResource(R.string.settings_account_delete_confirm_title)) },
+            text = { Text(stringResource(R.string.settings_account_delete_confirm_text)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    authManager?.deleteAccount { ok, err ->
+                        if (ok) {
+                            signedIn = false
+                            accountLabel = null
+                            Toast.makeText(context, R.string.settings_account_delete_done, Toast.LENGTH_LONG).show()
+                            onAccountDeleted()
+                        } else {
+                            Toast.makeText(context, err ?: context.getString(R.string.settings_account_relogin_needed), Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }) { Text(stringResource(R.string.settings_account_delete), color = Color(0xFFD32F2F)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text(stringResource(R.string.menu_cancel)) }
+            }
+        )
+    }
+}
+
+@Composable
 private fun DiagnosticWidgetsSetting(
     cacheEnabled: Boolean,
     fpsEnabled: Boolean,
     zoomWidgetEnabled: Boolean,
     speedometerEnabled: Boolean,
+    coordsWidgetEnabled: Boolean,
+    developerModeEnabled: Boolean,
     onCacheToggled: (Boolean) -> Unit,
     onFpsToggled: (Boolean) -> Unit,
     onZoomWidgetToggled: (Boolean) -> Unit,
     onSpeedometerToggled: (Boolean) -> Unit,
+    onCoordsWidgetToggled: (Boolean) -> Unit,
+    onDeveloperModeToggled: (Boolean) -> Unit,
     currentLanguage: String,
     onLanguageChanged: (String) -> Unit
 ) {
@@ -579,11 +775,28 @@ private fun DiagnosticWidgetsSetting(
         // Selector de idioma (i18n)
         LanguageSetting(currentLanguage, onLanguageChanged)
 
+        // Modo Desarrollador: revela botones/opciones de prueba (se ocultarán en la
+        // versión final). Las pantallas deben observar state.developerMode.
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.settings_developer_mode), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.settings_developer_mode_desc), color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, textAlign = TextAlign.Justify)
+            }
+            Switch(
+                checked = developerModeEnabled,
+                onCheckedChange = onDeveloperModeToggled,
+                colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFFD4AF37), checkedTrackColor = Color(0xFF6B1C3A))
+            )
+        }
+
         // Toggle de Caché
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Column {
+            // weight(1f) deja que la descripción ocupe el ancho disponible; así
+            // TextAlign.Justify reparte el texto cuando ocupa 2+ líneas (la última
+            // línea queda alineada a la izquierda, así que en 1 línea no se nota).
+            Column(modifier = Modifier.weight(1f)) {
                 Text(stringResource(R.string.settings_cache_widget), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Text(stringResource(R.string.settings_cache_widget_desc), color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+                Text(stringResource(R.string.settings_cache_widget_desc), color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, textAlign = TextAlign.Justify)
             }
             Switch(
                 checked = cacheEnabled,
@@ -594,9 +807,9 @@ private fun DiagnosticWidgetsSetting(
 
         // Toggle de FPS
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(stringResource(R.string.settings_fps_widget), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Text(stringResource(R.string.settings_fps_widget_desc), color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+                Text(stringResource(R.string.settings_fps_widget_desc), color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, textAlign = TextAlign.Justify)
             }
             Switch(
                 checked = fpsEnabled,
@@ -607,9 +820,9 @@ private fun DiagnosticWidgetsSetting(
 
         // Toggle de nivel de Zoom
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(stringResource(R.string.settings_zoom_widget), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Text(stringResource(R.string.settings_zoom_widget_desc), color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+                Text(stringResource(R.string.settings_zoom_widget_desc), color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, textAlign = TextAlign.Justify)
             }
             Switch(
                 checked = zoomWidgetEnabled,
@@ -620,13 +833,26 @@ private fun DiagnosticWidgetsSetting(
 
         // Toggle de Velocímetro
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(stringResource(R.string.settings_speedometer), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Text(stringResource(R.string.settings_speedometer_desc), color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+                Text(stringResource(R.string.settings_speedometer_desc), color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, textAlign = TextAlign.Justify)
             }
             Switch(
                 checked = speedometerEnabled,
                 onCheckedChange = onSpeedometerToggled,
+                colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFFD4AF37), checkedTrackColor = Color(0xFF6B1C3A))
+            )
+        }
+
+        // Toggle del widget de coordenadas (X / Y / Z)
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.settings_coords_widget), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.settings_coords_widget_desc), color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, textAlign = TextAlign.Justify)
+            }
+            Switch(
+                checked = coordsWidgetEnabled,
+                onCheckedChange = onCoordsWidgetToggled,
                 colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFFD4AF37), checkedTrackColor = Color(0xFF6B1C3A))
             )
         }

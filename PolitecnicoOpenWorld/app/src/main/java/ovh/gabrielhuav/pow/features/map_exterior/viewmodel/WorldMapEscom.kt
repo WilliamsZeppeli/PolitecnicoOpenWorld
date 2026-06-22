@@ -26,18 +26,18 @@ import ovh.gabrielhuav.pow.data.local.room.PowDatabase
 import ovh.gabrielhuav.pow.data.network.WebSocketManager
 import ovh.gabrielhuav.pow.data.repository.OverpassRepository
 import ovh.gabrielhuav.pow.data.repository.SettingsRepository
-import ovh.gabrielhuav.pow.domain.models.CarModel
-import ovh.gabrielhuav.pow.domain.models.InteriorBuilding
-import ovh.gabrielhuav.pow.domain.models.MapWay
-import ovh.gabrielhuav.pow.domain.models.Npc
-import ovh.gabrielhuav.pow.domain.models.NpcType
+import ovh.gabrielhuav.pow.domain.models.map.CarModel
+import ovh.gabrielhuav.pow.domain.models.map.InteriorBuilding
+import ovh.gabrielhuav.pow.domain.models.map.MapWay
+import ovh.gabrielhuav.pow.domain.models.map.Npc
+import ovh.gabrielhuav.pow.domain.models.map.NpcType
 import ovh.gabrielhuav.pow.domain.models.ai.NpcAiManager
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.PlayerAction
 import ovh.gabrielhuav.pow.features.settings.models.ControlType
 import ovh.gabrielhuav.pow.data.local.room.entity.LandmarkEntity
-import ovh.gabrielhuav.pow.domain.models.Landmark
-import ovh.gabrielhuav.pow.domain.models.LandmarkCatalogManager
-import ovh.gabrielhuav.pow.domain.models.LandmarkAssetTemplate
+import ovh.gabrielhuav.pow.domain.models.map.Landmark
+import ovh.gabrielhuav.pow.domain.models.map.LandmarkCatalogManager
+import ovh.gabrielhuav.pow.domain.models.map.LandmarkAssetTemplate
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -51,10 +51,10 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.math.abs
 import ovh.gabrielhuav.pow.data.repository.CollectibleRepository
-import ovh.gabrielhuav.pow.domain.models.ActiveCollectible
+import ovh.gabrielhuav.pow.domain.models.map.ActiveCollectible
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import ovh.gabrielhuav.pow.domain.models.ShineCTOLocation
+import ovh.gabrielhuav.pow.domain.models.map.ShineCTOLocation
 
 internal fun WorldMapViewModel.spawnEscomDoors() {
         // Las coordenadas exactas se ajustan con el Modo Diseñador.
@@ -80,15 +80,21 @@ internal fun WorldMapViewModel.spawnEscomDoors() {
         )
         _escomItems.value = doors
         _uiState.update { it.copy(isZombieHandSpawned = true) }
-    }
+    }
+
 
 internal fun WorldMapViewModel.isInsideEscom(lat: Double, lon: Double): Boolean {
         return abs(lat - ESCOM_BASE_LAT) < ESCOM_OFFSET &&
                 abs(lon - ESCOM_BASE_LON) < ESCOM_OFFSET
-    }
+    }
+
 
 internal fun WorldMapViewModel.spawnOustedDriver(carLocation: GeoPoint) {
-        val offsetLoc = GeoPoint(carLocation.latitude + 0.00005, carLocation.longitude + 0.00005)
+        // DE-DUP (2026-06-21): sincronizado al MIEMBRO canónico de WorldMapViewModel.kt antes de
+        // eliminarlo. El miembro divergía: el conductor aparece más cerca (+0.00002 vs +0.00005) y
+        // REACCIONA según personalidad (trait/fear/aggro/llamar a la policía); la extensión vieja no.
+        // El conductor desalojado aparece JUNTO al coche (~2 m), como si se bajara por la puerta.
+        val offsetLoc = GeoPoint(carLocation.latitude + 0.00002, carLocation.longitude + 0.00002)
         val randomHairId = (1..5).random()
         val randomHairColor = listOf(
             androidx.compose.ui.graphics.Color.Black,
@@ -102,7 +108,7 @@ internal fun WorldMapViewModel.spawnOustedDriver(carLocation: GeoPoint) {
             androidx.compose.ui.graphics.Color.Blue,
             androidx.compose.ui.graphics.Color.Green
         ).random()
-        val visualConfig = ovh.gabrielhuav.pow.domain.models.CharacterVisualConfig(
+        val visualConfig = ovh.gabrielhuav.pow.domain.models.map.CharacterVisualConfig(
             bodyFolder = "npc_walk_1",
             bodyPrefix = "npc_walk_1_",
             hairId = randomHairId,
@@ -110,13 +116,25 @@ internal fun WorldMapViewModel.spawnOustedDriver(carLocation: GeoPoint) {
             shirtColor = randomShirtColor,
             pantsColor = androidx.compose.ui.graphics.Color.DarkGray
         )
+        // REACCIÓN AL ROBO según personalidad: el cobarde huye (estado de miedo), el
+        // agresivo te embiste (estado aggro) y el pasivo simplemente se aleja andando.
+        val trait = NpcAiManager.rollTrait()
+        val now = System.currentTimeMillis()
         val driver = Npc(
             id = UUID.randomUUID().toString(),
             type = NpcType.PERSON,
             location = offsetLoc,
             speed = NpcAiManager.PERSON_SPEED,
             isMoving = true,
-            visualConfig = visualConfig
+            visualConfig = visualConfig,
+            trait = trait,
+            fearUntil = if (trait == ovh.gabrielhuav.pow.domain.models.map.NpcTrait.COWARD) now + NpcAiManager.FEAR_DURATION_MS else 0L,
+            fearFromLat = carLocation.latitude,
+            fearFromLon = carLocation.longitude,
+            aggroUntil = if (trait == ovh.gabrielhuav.pow.domain.models.map.NpcTrait.AGGRESSIVE) now + NpcAiManager.AGGRO_DURATION_MS else 0L,
+            // Llama a la policía unos segundos (muestra 📞 sobre su cabeza).
+            callingUntil = now + 4000L
         )
         remoteEntities[driver.id] = driver
-    }
+    }
+

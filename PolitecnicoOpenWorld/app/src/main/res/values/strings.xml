@@ -8,7 +8,7 @@
     <string name="exit_dialog_dismiss">Salir</string>
 
     <!-- ─── Menú principal (features/main_menu) ─── -->
-    <string name="menu_version">v%1$s - ESCOM Edition</string>
+    <string name="menu_version">ALPHA - v%1$s</string>
     <string name="menu_start_game">MUNDO LIBRE</string>
     <string name="menu_load_game">MODO HISTORIA</string>
     <string name="menu_multiplayer">MULTIJUGADOR</string>
@@ -27,12 +27,16 @@
     <string name="menu_warmup_text">El servidor multijugador está en reposo.\nDespertándolo... %1$ds</string>
     <string name="menu_warmup_hint">Puede tardar hasta 60 segundos.</string>
     <string name="menu_return">VOLVER AL MENÚ</string>
+    <string name="menu_signed_in_as">Conectado: %1$s</string>
+    <string name="menu_local_mode">Modo local (sin sesión)</string>
+    <!-- Botón genérico de retroceso (coleccionables, ajustes) -->
+    <string name="menu_back">VOLVER</string>
 
     <!-- ─── Modo Historia / Campaña (features/main_menu) ─── -->
     <string name="story_title">MODO HISTORIA</string>
     <string name="story_subtitle">El brote del Politécnico</string>
     <string name="story_prologue_heading">PRÓLOGO</string>
-    <string name="story_prologue">Cierto día, en la ENCB, Prankedy llegó haciendo de las suyas y, por una broma, terminó accidentalmente en mitad de un experimento de proyecto de titulación: la creación de una sustancia corrosiva, capaz de envenenar y penetrar el látex. El error pasa desapercibido… y el tiempo pasa.</string>
+    <string name="story_prologue">Cierto día, en la ENCB, Prankedy llegó haciendo de las suyas y, por una broma, terminó accidentalmente en mitad de un experimento que provocó la creación de un compuesto desconocido e infeccioso, capaz de penetrar el látex. El error pasa desapercibido… y el tiempo pasa.</string>
     <string name="story_choose_school">Elige tu escuela</string>
     <string name="story_school_unavailable">En desarrollo</string>
     <string name="story_school_escom_desc">Zacatenco, CDMX · Disponible</string>
@@ -40,7 +44,7 @@
     <string name="story_load_game">CARGAR PARTIDA</string>
     <string name="story_no_saves">Sin partidas guardadas</string>
     <string name="story_saved_at">Partida guardada · %1$s</string>
-    <string name="story_start">COMENZAR</string>
+    <string name="story_start">NUEVA PARTIDA</string>
     <string name="story_back">VOLVER</string>
     <!-- Intro de campaña ("Listo para Iniciar") -->
     <string name="story_intro_ready">Listo para Iniciar</string>
@@ -65,6 +69,9 @@
     <string name="settings_npc_lod_desc">Dibuja como emoji 🧍🚗🧟 los NPCs lejanos y reserva el sprite completo solo para los muy cercanos. Reduce el costo de render (ideal en multijugador con muchos NPCs).</string>
     <string name="settings_npc_full_title">Optimizar para gama baja</string>
     <string name="settings_npc_full_desc">Reemplaza TODOS los assets de los NPCs por emojis 🧍🚗🧟👮, sin importar la distancia. No se generan sprites ni bitmaps: el modo más ligero posible, para equipos muy débiles.</string>
+    <string name="settings_optimize_device">Optimizar para mi dispositivo</string>
+    <string name="settings_optimize_device_desc">Aplica de un toque los ajustes más ligeros para gama baja: baja la cantidad de NPCs al mínimo y dibuja a todos como emoji.</string>
+    <string name="settings_optimize_applied">Ajustes optimizados para gama baja</string>
     <string name="settings_map_provider">Proveedor de Mapa</string>
     <string name="settings_map_change">Cambiar Mapa</string>
     <string name="settings_map_restore">Restaurar Mapa</string>
@@ -85,6 +92,29 @@
     <string name="settings_zoom_widget_desc">Muestra el nivel de zoom actual en vivo</string>
     <string name="settings_speedometer">Velocímetro</string>
     <string name="settings_speedometer_desc">Muestra tu velocidad (km/h) al conducir</string>
+    <string name="settings_coords_widget">Coordenadas (X/Y/Z)</string>
+    <string name="settings_coords_widget_desc">Muestra tu posición X/Y/Z en el mundo y en interiores</string>
+    <string name="settings_developer_mode">Modo Desarrollador</string>
+    <string name="settings_developer_mode_desc">Muestra opciones y botones de prueba reservados para desarrollo</string>
+    <!-- ─── Cuenta / Autenticación (Google Sign-In) ─── -->
+    <string name="settings_cat_account">Cuenta</string>
+    <string name="settings_account_desc">Inicia sesión con Google para jugar en línea. El juego local y el Modo Historia no requieren cuenta.</string>
+    <string name="settings_account_signed_in_as">Sesión iniciada como:\n%1$s</string>
+    <string name="settings_account_not_signed_in">No has iniciado sesión.</string>
+    <string name="settings_account_sign_in">Iniciar sesión con Google</string>
+    <string name="settings_account_sign_out">Cerrar sesión</string>
+    <string name="settings_account_delete">Eliminar mi cuenta y datos</string>
+    <string name="settings_account_delete_confirm_title">¿Eliminar tu cuenta?</string>
+    <string name="settings_account_delete_confirm_text">Se eliminará tu cuenta del juego y tus datos guardados en este dispositivo (partidas de campaña). Esta acción no se puede deshacer.</string>
+    <string name="settings_account_delete_done">Cuenta y datos eliminados.</string>
+    <string name="settings_account_relogin_needed">Por seguridad, vuelve a iniciar sesión antes de eliminar la cuenta.</string>
+    <string name="settings_account_sign_in_error">No se pudo iniciar sesión.</string>
+    <string name="settings_account_privacy">Ver política de privacidad</string>
+    <!-- URL pública de la política de privacidad (compartida por todos los idiomas) -->
+    <string name="settings_privacy_url" translatable="false">https://gabrielhuav.github.io/PolitecnicoOpenWorld/policy_en_es.html</string>
+    <string name="settings_cat_audio">Audio</string>
+    <string name="settings_music_volume">Volumen de música</string>
+    <string name="settings_sfx_volume">Volumen de efectos</string>
     <string name="settings_language">Idioma</string>
     <string name="settings_language_system">Sistema (predeterminado)</string>
     <string name="settings_controls_saved">Configuración de controles guardada</string>
@@ -288,5 +318,98 @@
     
     <string name="settings_dpad">Cruz de Botones</string>
     <string name="settings_joystick">Joystick Virtual</string>
+
+    <!-- ─── Modo Historia: misión fallida ─── -->
+    <string name="wm_mission_failed">MISIÓN\nFALLIDA</string>
+    <string name="wm_retry_mission">REINTENTAR MISIÓN</string>
+    <string name="wm_exit_to_menu">Salir al menú</string>
+    <string name="wm_tip_carjack">Presiona Y cerca de un auto para subirte a el.</string>
+    <string name="wm_opt_save_game">Guardar partida</string>
+    <!-- ─── Widget de objetivo (campaña) ─── -->
+    <string name="wm_objective_label">🎯 OBJETIVO</string>
+    <string name="wm_objective_done">✅ Cumplido</string>
+    <string name="wm_dist_km">A %1$s km</string>
+    <string name="wm_dist_m">A %1$d m</string>
+    <!-- ─── Prankedy: descripción completa del diálogo de contratación ─── -->
+    <string name="wm_prankedy_desc_full">Un personaje misterioso que apareció en los pasillos del Politécnico. Experto en travesuras y en lanzar objetos a distancia. Con él de tu lado, los enemigos tienen poco que hacer.\n\n⚔️ Ataca NPCs hostiles automáticamente\n🏃 Te sigue a donde vayas\n🎭 Siempre tiene algo que decir</string>
+    <!-- ─── Editor Debug Interiores (Modo Desarrollador) ─── -->
+    <string name="dbg_move_recenter">Mover (toca = recentrar)</string>
+    <string name="dbg_exit">Salir</string>
+    <string name="dbg_shape_rect">un rectángulo</string>
+    <string name="dbg_shape_line">una línea</string>
+    <string name="dbg_hint_idle">Editor de líneas: elige una herramienta y dibuja con el dedo en el mapa</string>
+    <string name="dbg_hint_draw">Dibuja con el dedo: arrastra para %1$s</string>
+    <string name="dbg_tool_wall">Barda</string>
+    <string name="dbg_tool_zone">Zona</string>
+    <string name="dbg_tool_ped">Peatonal</string>
+    <string name="dbg_tool_car">Autos</string>
+    <string name="dbg_undo">Deshacer</string>
+    <string name="dbg_clear">Limpiar</string>
+    <string name="dbg_export">Exportar</string>
+    <string name="dbg_import">Importar</string>
+    <string name="dbg_route_remove">Quitar NPCs de ruta</string>
+    <string name="dbg_route_seed">Sembrar 60 NPCs en ruta</string>
+    <string name="dbg_counts">bardas %1$d - zonas %2$d - peatonal %3$d - autos %4$d</string>
+    <!-- ─── Modo Historia: intro cómic + selector de slots ─── -->
+    <string name="story_choose_slot">Elige un slot para cargar tu partida.</string>
+    <string name="story_tap_start">Toca la pantalla para INICIAR</string>
+    <string name="story_tap_continue">Toca a la derecha para continuar</string>
+    <string name="story_intro_back">&lt; Volver</string>
+    <string name="story_intro_skip">Saltar</string>
+    <string name="story_intro_start">Iniciar</string>
+    <!-- ─── Editor del cómic de intro (Modo Desarrollador) ─── -->
+    <string name="story_ed_done">Listo</string>
+    <string name="story_ed_edit">Editar</string>
+    <string name="story_ed_move">⠿  Mover panel  (arrástrame)</string>
+    <string name="story_ed_box">Cuadro - top=%1$.2f alto=%2$.2f ancho=%3$.2f letra=%4$.0f</string>
+    <string name="story_ed_up">Subir</string>
+    <string name="story_ed_down">Bajar</string>
+    <string name="story_ed_h_minus">Alto -</string>
+    <string name="story_ed_h_plus">Alto +</string>
+    <string name="story_ed_w_minus">Ancho -</string>
+    <string name="story_ed_w_plus">Ancho +</string>
+    <string name="story_ed_f_minus">Letra -</string>
+    <string name="story_ed_f_plus">Letra +</string>
+    <string name="story_ed_all">Todas</string>
+    <string name="story_ed_export">Exportar</string>
+    <!-- ─── Interiores / zombis (player-facing) ─── -->
+    <string name="cd_exit">Salir</string>
+    <string name="cd_key">Llave</string>
+    <string name="cd_player_remote">Jugador remoto</string>
+    <string name="zhud_inv_empty">Vacío. Busca y recoge una llave.</string>
+    <string name="zhud_inv_has_key">Llave guardada. Pruébala en la puerta de avance (→).</string>
+    <string name="zgame_key_prompt">🔑 Hay una llave — pulsa ACCIÓN para inspeccionarla</string>
+    <string name="zgame_objective_investigate">Objetivo: Investiga qué pasó</string>
+    <!-- ─── Diálogos de guardar/cargar (MainActivity) ─── -->
+    <string name="save_dialog_load">Cargar partida</string>
+    <string name="save_dialog_new_slot">Nueva partida · elige slot</string>
+    <string name="save_toast_saved">Partida guardada (slot %1$s)</string>
+    <!-- ─── Transit metrobús (player-facing) ─── -->
+    <string name="cd_metrobus_map">Mapa del Metrobús</string>
+    <string name="int_metrobus_select_dest">SISTEMA METROBÚS · SELECCIONA TU DESTINO</string>
+    <string name="int_save_waypoints">Guardar Waypoints</string>
+    <string name="int_metrobus_select_station">Seleccionar Estación de Metrobús</string>
+    <string name="int_metrobus_header">METROBÚS · %1$s</string>
+    <string name="int_designer_metrobus">DISEÑADOR METROBÚS · %1$s</string>
+    <string name="cd_metrobus_player">Jugador Metrobús</string>
+    <!-- ─── Diseñador de matrices/waypoints (compartido metro/metrobús/zombi, Modo Desarrollador) ─── -->
+    <string name="int_designer">Diseñador</string>
+    <string name="int_grid_paint">Toca o arrastra sobre la rejilla. Rojo = pared.</string>
+    <string name="int_matrix">MATRIZ</string>
+    <string name="int_waypoints">WAYPOINTS</string>
+    <string name="int_wall">PARED</string>
+    <string name="int_erase">BORRAR</string>
+    <string name="int_save">GUARDAR</string>
+    <string name="int_w_minus">ANCHO −</string>
+    <string name="int_w_plus">ANCHO +</string>
+    <string name="int_h_minus">ALTO −</string>
+    <string name="int_h_plus">ALTO +</string>
+    <string name="int_col_minus">COL −</string>
+    <string name="int_col_plus">COL +</string>
+    <string name="int_row_minus">FIL −</string>
+    <string name="int_row_plus">FIL +</string>
+    <string name="int_move_handle">⠿ Mover (toca = recentrar)</string>
+    <string name="cd_zombie">Zombi</string>
+    <string name="zhud_inventory">INVENTARIO</string>
 
 </resources>

@@ -1,11 +1,11 @@
 package ovh.gabrielhuav.pow.features.map_exterior.viewmodel
 
 import org.osmdroid.util.GeoPoint
-import ovh.gabrielhuav.pow.domain.models.ActiveCollectible
-import ovh.gabrielhuav.pow.domain.models.CarModel
-import ovh.gabrielhuav.pow.domain.models.InteriorBuilding
-import ovh.gabrielhuav.pow.domain.models.Npc
-import ovh.gabrielhuav.pow.domain.models.Landmark
+import ovh.gabrielhuav.pow.domain.models.map.ActiveCollectible
+import ovh.gabrielhuav.pow.domain.models.map.CarModel
+import ovh.gabrielhuav.pow.domain.models.map.InteriorBuilding
+import ovh.gabrielhuav.pow.domain.models.map.Npc
+import ovh.gabrielhuav.pow.domain.models.map.Landmark
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.PlayerAction
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.PlayerSkin
 import ovh.gabrielhuav.pow.features.settings.models.ControlType
@@ -83,7 +83,9 @@ data class WorldMapState(
     val showZoomWidget: Boolean = false,
     // Widget velocímetro (Ajustes → Interfaz): velocidad en km/h, visible solo al conducir.
     val showSpeedometer: Boolean = true,
-    val controlType: ControlType = ControlType.DPAD,
+    // Widget de coordenadas (Ajustes → Interfaz): X=longitud, Y=latitud, Z=GLOBAL.
+    val showCoordsWidget: Boolean = false,
+    val controlType: ControlType = ControlType.JOYSTICK, // Default: JOYSTICK (las flechitas se cambian en Ajustes)
     val controlsScale: Float = 1.0f,
     val swapControls: Boolean = false,
 
@@ -127,6 +129,8 @@ data class WorldMapState(
     val showClaimedPopupFor: ActiveCollectible? = null,
     val interactionPrompt: String? = null,
     val showWastedScreen: Boolean = false,
+    // MODO HISTORIA: pantalla "MISIÓN FALLIDA" (cuando la policía mata a Prankedy en la escolta).
+    val showMissionFailed: Boolean = false,
 
     // ─── NIVEL DE BÚSQUEDA (estilo GTA) ──────────────────────────────────────
     // Sube al golpear NPCs; mientras sea > 0 aparecen patrullas que te persiguen.
@@ -159,7 +163,7 @@ data class WorldMapState(
     val showInteriorDebugOverlay: Boolean = false,
     // Colisiones del exterior (polígonos = zonas NO caminables, p. ej. el edificio ESCOM;
     // walls = bardas). Se exponen para dibujarlas en el overlay de Debug Interiores.
-    val exteriorCollisions: ovh.gabrielhuav.pow.domain.models.ExteriorCollisionsConfig? = null,
+    val exteriorCollisions: ovh.gabrielhuav.pow.domain.models.map.ExteriorCollisionsConfig? = null,
 
     // NUEVAS VARIABLES PARA EL CREADOR DE RUTAS
     val routeDebugWaypoints: List<GeoPoint> = emptyList(), // Las "migas de pan"
@@ -172,16 +176,20 @@ data class WorldMapState(
     // del color/tipo. Se dibujan en vivo (NativeOsmMap) y se exportan/importan a JSON
     // (formato exterior_collisions + navPaths).
     val debugEditTool: DebugEditTool = DebugEditTool.NONE,
-    val debugEditWalls: List<ovh.gabrielhuav.pow.domain.models.CollisionWall> = emptyList(),     // bardas ROJAS editadas
-    val debugEditBlocks: List<ovh.gabrielhuav.pow.domain.models.CollisionPolygon> = emptyList(), // zonas ROJAS editadas
+    val debugEditWalls: List<ovh.gabrielhuav.pow.domain.models.map.CollisionWall> = emptyList(),     // bardas ROJAS editadas
+    val debugEditBlocks: List<ovh.gabrielhuav.pow.domain.models.map.CollisionPolygon> = emptyList(), // zonas ROJAS editadas
     val debugEditNavPed: List<List<GeoPoint>> = emptyList(),                               // caminos VERDES (peatonal)
     val debugEditNavCar: List<List<GeoPoint>> = emptyList(),                               // caminos NARANJAS (autos)
 
     // ─── MODO HISTORIA: objetivo de campaña + widget de Objetivos ────────────
     // Objetivo activo (Misión 1 = ir a la ENCB). El widget de Objetivos lo muestra
     // (título + distancia) siempre que haya uno. `objectiveDone` se marca al llegar.
-    val currentObjective: ovh.gabrielhuav.pow.domain.models.CampaignObjective? = null,
+    val currentObjective: ovh.gabrielhuav.pow.domain.models.campaign.CampaignObjective? = null,
     val objectiveDone: Boolean = false,
+    // MODO HISTORIA · Misión 2: al cumplir la Misión 1 (llegar a la ESCOM) se pone a true para
+    // que MainActivity reproduzca el cómic IntroPOW12..14 y luego arranque la persecución.
+    // MainActivity lo consume (lo vuelve a false) al navegar al cómic.
+    val pendingMission2Intro: Boolean = false,
 
     // Easter Eggs y Opciones extra
     val showRoadNetwork: Boolean = true,
@@ -206,17 +214,17 @@ data class WorldMapState(
     val pendingDoorDestination: String? = null,
 
     // ─── Metro Stations ───────────────────────────────────────────────────────
-    val metroStations: List<ovh.gabrielhuav.pow.domain.models.MetroStation> = emptyList(),
-    val nearbyMetroStation: ovh.gabrielhuav.pow.domain.models.MetroStation? = null,
+    val metroStations: List<ovh.gabrielhuav.pow.domain.models.map.MetroStation> = emptyList(),
+    val nearbyMetroStation: ovh.gabrielhuav.pow.domain.models.map.MetroStation? = null,
     val showMetroFade: Boolean = false,
-    val metroFadeCompleteStation: ovh.gabrielhuav.pow.domain.models.MetroStation? = null,
+    val metroFadeCompleteStation: ovh.gabrielhuav.pow.domain.models.map.MetroStation? = null,
 
     
     // ─── Metrobús Stations ────────────────────────────────────────────────────
-    val metrobusStations: List<ovh.gabrielhuav.pow.domain.models.MetrobusStation> = emptyList(),
-    val nearbyMetrobusStation: ovh.gabrielhuav.pow.domain.models.MetrobusStation? = null,
+    val metrobusStations: List<ovh.gabrielhuav.pow.domain.models.map.MetrobusStation> = emptyList(),
+    val nearbyMetrobusStation: ovh.gabrielhuav.pow.domain.models.map.MetrobusStation? = null,
     val showMetrobusFade: Boolean = false,
-    val metrobusFadeCompleteStation: ovh.gabrielhuav.pow.domain.models.MetrobusStation? = null,
+    val metrobusFadeCompleteStation: ovh.gabrielhuav.pow.domain.models.map.MetrobusStation? = null,
 
     // ─── Pre-descarga de tiles de la zona actual (offline) ───────────────────
     // Solo aplica al proveedor nativo OSM (caché Room unificada). Permite seguir
@@ -245,5 +253,8 @@ data class WorldMapState(
     val showPrankedyHireDialog: Boolean = false,    // muestra el modal de contratar
     val prankedyIsHireable: Boolean = true,         // false = en penalización
     val prankedyHireableInSeconds: Int = 0,         // countdown de penalización
-    val prankedyDialogue: String? = null            // texto de la burbuja flotante
+    val prankedyDialogue: String? = null,           // texto de la burbuja flotante
+    // MODO HISTORIA: Prankedy está SUBIENDO al coche (corre hasta ti). Mientras es true, el coche
+    // no avanza (no puedes irte sin él) y Prankedy sigue visible corriendo hacia tu posición.
+    val prankedyBoarding: Boolean = false
 )

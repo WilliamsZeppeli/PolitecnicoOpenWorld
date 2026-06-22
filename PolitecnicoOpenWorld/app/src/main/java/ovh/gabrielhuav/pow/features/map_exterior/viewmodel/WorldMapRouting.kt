@@ -26,18 +26,18 @@ import ovh.gabrielhuav.pow.data.local.room.PowDatabase
 import ovh.gabrielhuav.pow.data.network.WebSocketManager
 import ovh.gabrielhuav.pow.data.repository.OverpassRepository
 import ovh.gabrielhuav.pow.data.repository.SettingsRepository
-import ovh.gabrielhuav.pow.domain.models.CarModel
-import ovh.gabrielhuav.pow.domain.models.InteriorBuilding
-import ovh.gabrielhuav.pow.domain.models.MapWay
-import ovh.gabrielhuav.pow.domain.models.Npc
-import ovh.gabrielhuav.pow.domain.models.NpcType
+import ovh.gabrielhuav.pow.domain.models.map.CarModel
+import ovh.gabrielhuav.pow.domain.models.map.InteriorBuilding
+import ovh.gabrielhuav.pow.domain.models.map.MapWay
+import ovh.gabrielhuav.pow.domain.models.map.Npc
+import ovh.gabrielhuav.pow.domain.models.map.NpcType
 import ovh.gabrielhuav.pow.domain.models.ai.NpcAiManager
 import ovh.gabrielhuav.pow.features.map_exterior.ui.components.PlayerAction
 import ovh.gabrielhuav.pow.features.settings.models.ControlType
 import ovh.gabrielhuav.pow.data.local.room.entity.LandmarkEntity
-import ovh.gabrielhuav.pow.domain.models.Landmark
-import ovh.gabrielhuav.pow.domain.models.LandmarkCatalogManager
-import ovh.gabrielhuav.pow.domain.models.LandmarkAssetTemplate
+import ovh.gabrielhuav.pow.domain.models.map.Landmark
+import ovh.gabrielhuav.pow.domain.models.map.LandmarkCatalogManager
+import ovh.gabrielhuav.pow.domain.models.map.LandmarkAssetTemplate
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -51,10 +51,10 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.math.abs
 import ovh.gabrielhuav.pow.data.repository.CollectibleRepository
-import ovh.gabrielhuav.pow.domain.models.ActiveCollectible
+import ovh.gabrielhuav.pow.domain.models.map.ActiveCollectible
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import ovh.gabrielhuav.pow.domain.models.ShineCTOLocation
+import ovh.gabrielhuav.pow.domain.models.map.ShineCTOLocation
 
 private typealias Seg = WorldMapViewModel.Seg
 
@@ -103,6 +103,52 @@ internal fun WorldMapViewModel.getNearestPointOnNetwork(t: GeoPoint): GeoPoint {
         }
         return pt
     }
+
+// ─── ÍNDICE PARA VÍAS DE AUTOMÓVIL ─────────────────────────────────────────────
+// Duplicado del índice espacial genérico, pero filtrando SOLO las vías donde
+// isForCars == true. Así el coche no puede circular por banquetas, ciclovías ni
+// andadores peatonales.
+
+internal fun WorldMapViewModel.ensureIndexForCars() {
+    if (indexedRefForCars === roadNetwork) return
+    val carRoads = roadNetwork.filter { it.isForCars }
+    val newSegs = ArrayList<Seg>(carRoads.sumOf { it.nodes.size }.toInt())
+    val newGrid = HashMap<Long, MutableList<Seg>>()
+    for (way in carRoads) {
+        for (i in 0 until way.nodes.size - 1) {
+            val a = way.nodes[i]; val b = way.nodes[i + 1]
+            val seg = Seg(GeoPoint(a.lat, a.lon), GeoPoint(b.lat, b.lon),
+                min(a.lat, b.lat), max(a.lat, b.lat), min(a.lon, b.lon), max(a.lon, b.lon))
+            newSegs.add(seg)
+            for (r in cell(seg.minLat)..cell(seg.maxLat))
+                for (c in cell(seg.minLon)..cell(seg.maxLon))
+                    newGrid.getOrPut(pack(r, c)) { mutableListOf() }.add(seg)
+        }
+    }
+    indexedRefForCars = roadNetwork; segsForCars = newSegs; gridForCars = newGrid
+}
+
+internal fun WorldMapViewModel.candidatesForCars(loc: GeoPoint): List<Seg> {
+    val r = cell(loc.latitude); val c = cell(loc.longitude)
+    val res = LinkedHashSet<Seg>()
+    for (dr in -1..1) for (dc in -1..1) gridForCars[pack(r + dr, c + dc)]?.let { res.addAll(it) }
+    return if (res.isNotEmpty()) res.toList() else segsForCars
+}
+
+// Versión para automóviles de getNearestPointOnNetwork.
+// A diferencia de la versión peatonal, NO otorga paso libre sobre landmarks
+// (el coche no debe atravesar edificios) y solo considera vías con isForCars == true.
+internal fun WorldMapViewModel.getNearestCarRoadPoint(t: GeoPoint): GeoPoint {
+    ensureIndexForCars()
+    val cands = candidatesForCars(t)
+    if (cands.isEmpty()) return t
+    var best = Double.MAX_VALUE; var pt = t
+    for (seg in cands) {
+        val p = project(t, seg.s, seg.e); val d = distance(t, p)
+        if (d < best) { best = d; pt = p }
+    }
+    return pt
+}
 
 internal fun WorldMapViewModel.project(p: GeoPoint, v: GeoPoint, w: GeoPoint): GeoPoint {
         val l2 = (w.latitude - v.latitude).pow(2) + (w.longitude - v.longitude).pow(2)

@@ -89,6 +89,22 @@ fun PlayerView(
     var image by remember { mutableStateOf<ImageBitmap?>(null) }
     val cache = remember { mutableMapOf<String, ImageBitmap?>() }
 
+    // AUDIO de pasos en interiores SIN motor de sonido propio (ESCOM simple / ShineCTO): su VM no toca
+    // SoundManager, así que lo enrutamos aquí (vista del jugador LOCAL; la RemotePlayerView NO lleva esto
+    // para no sonar por cada jugador remoto). El game loop del mapa global está GATEADO
+    // (worldMapForeground=false en interiores), así que no interfiere. Al salir → onDispose para los pasos.
+    val soundManager = remember { ovh.gabrielhuav.pow.features.audio.SoundManager.getInstance(context) }
+    LaunchedEffect(action) {
+        when (action) {
+            PlayerAction.WALK -> { soundManager.playWalk(); soundManager.stopRun() }
+            PlayerAction.RUN  -> { soundManager.playRun(); soundManager.stopWalk() }
+            else -> { soundManager.stopWalk(); soundManager.stopRun() }
+        }
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { soundManager.stopWalk(); soundManager.stopRun() }
+    }
+
     val shake by animateFloatAsState(
         targetValue = if (damagePulse % 2 == 0) 0f else 8f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioHighBouncy, stiffness = Spring.StiffnessHigh),
@@ -120,7 +136,7 @@ fun PlayerView(
 
     Box(modifier = modifier.size(sizeDp).graphicsLayer { translationX = shake }, contentAlignment = Alignment.Center) {
         if (image != null) {
-            Image(image!!, "Jugador", modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = if (facingRight) 1f else -1f })
+            Image(image!!, androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.cd_player), modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = if (facingRight) 1f else -1f })
         } else {
             Box(Modifier.fillMaxSize().clip(CircleShape).background(Color(0xFFD91B5B)).border(2.dp, Color.White, CircleShape))
         }
@@ -169,7 +185,7 @@ fun RemotePlayerView(
                     .padding(horizontal = 5.dp, vertical = 1.dp))
         }
         if (image != null) {
-            Image(image!!, "Jugador remoto",
+            Image(image!!, androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.cd_player_remote),
                 modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = if (facingRight) 1f else -1f })
         } else {
             Box(Modifier.fillMaxSize().clip(CircleShape).background(Color(0xFF2196F3)).border(2.dp, Color.White, CircleShape))

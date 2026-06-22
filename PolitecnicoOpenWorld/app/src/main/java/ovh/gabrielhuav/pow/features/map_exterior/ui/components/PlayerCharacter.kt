@@ -41,7 +41,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import ovh.gabrielhuav.pow.domain.models.CarModel
+import ovh.gabrielhuav.pow.domain.models.map.CarModel
 import ovh.gabrielhuav.pow.features.map_exterior.viewmodel.WorldMapState
 
 @Composable
@@ -190,8 +190,12 @@ fun PlayerCharacter(
             } else {
                 // ── Modo a pie ───────────────────────────────────────────
 
-                // 🧍 Jugador a pie: 1.3 m, en paridad con los peatones NPC (antes 0.9 m).
-                val exactPersonDp = (1.3 / metersPerPixel).dp.coerceAtLeast(12.dp)
+                // 🧍 Jugador a pie: TAMAÑO FIJO en pantalla, DESACOPLADO del zoom. El avatar del
+                // jugador NO debe encogerse al alejar la cámara; solo cambia su POSICIÓN en el mundo.
+                // (Los NPCs/peatones/coches SÍ siguen el tamaño real-meter dependiente del zoom; el
+                // tamaño fijo es solo para el jugador, a petición.) ~38dp ≈ el tamaño que tenía a pie
+                // en el zoom por defecto (z22), así no "salta" al ajustar el comportamiento.
+                val exactPersonDp = 38.dp
 
                 val action       = uiState.playerAction
                 val isFacingRight = uiState.isPlayerFacingRight
@@ -201,6 +205,15 @@ fun PlayerCharacter(
 
                 // Cache de bitmaps por ruta de asset
                 val bitmapCache = remember { mutableMapOf<String, ImageBitmap?>() }
+                // Cache de la FRACCIÓN VERTICAL opaca (alto del personaje / alto del lienzo)
+                // por asset. Sirve para normalizar el tamaño en pantalla entre animaciones:
+                // CORRER suele venir en un lienzo más alto, así que al ajustarse al cuadro el
+                // personaje se veía MÁS PEQUEÑO que CAMINAR. Compensamos con esta fracción.
+                val fracCache = remember { mutableMapOf<String, Float>() }
+                // Referencia de tamaño = fracción opaca de CAMINAR, PRECALCULADA y ESTÁTICA en
+                // `PlayerSkin.walkBodyFraction`. Antes se medía en runtime (async) y arrancaba en
+                // null: durante la 1ª vuelta de la animación la normalización se desactivaba y los
+                // frames cambiaban de tamaño. Con la constante está lista desde el primer frame.
 
                 // Relanzar cuando cambia la acción O la skin
                 LaunchedEffect(action, skin) {
@@ -210,16 +223,17 @@ fun PlayerCharacter(
                         val assetPath = skin.assetPath(action, currentFrame)
 
                         if (!bitmapCache.containsKey(assetPath)) {
-                            val bitmap = withContext(Dispatchers.IO) {
+                            val decoded = withContext(Dispatchers.IO) {
                                 try {
                                     context.assets.open(assetPath).use { stream ->
-                                        BitmapFactory.decodeStream(stream)?.asImageBitmap()
+                                        BitmapFactory.decodeStream(stream)
                                     }
                                 } catch (e: Exception) {
                                     null
                                 }
                             }
-                            bitmapCache[assetPath] = bitmap
+                            bitmapCache[assetPath] = decoded?.asImageBitmap()
+                            if (decoded != null) fracCache[assetPath] = opaqueVerticalFraction(decoded)
                         }
 
                         currentImage = bitmapCache[assetPath]
@@ -230,21 +244,24 @@ fun PlayerCharacter(
                 }
 
                 currentImage?.let { img ->
-                    val visualCompensation = when (action) {
-                        PlayerAction.IDLE    -> 1.0f
-                        PlayerAction.WALK    -> 1.0f
-                        PlayerAction.RUN     -> 1.3f
-                        PlayerAction.SPECIAL -> 1.15f
-                    }
+                    // Normalización de tamaño: hacemos que la ALTURA DEL PERSONAJE (contenido
+                    // opaco) sea SIEMPRE la misma (la de CAMINAR), sin importar cuánto padding
+                    // traiga el lienzo de cada animación. Así CORRER deja de verse más pequeño.
+                    val assetPath = skin.assetPath(action, currentFrame)
+                    val frac = (fracCache[assetPath] ?: 0.6f).coerceIn(0.05f, 1f)
+                    val ref = skin.walkBodyFraction.coerceIn(0.05f, 1f)
+                    // renderScale compensa skins cuyo personaje ocupa poca fracción del lienzo
+                    // (p. ej. escomboy en 256² con mucho margen) → así no se ven más pequeñas.
+                    val boxHeightDp = exactPersonDp * (ref / frac) * skin.renderScale
+                    val aspect = if (img.height > 0) img.width.toFloat() / img.height.toFloat() else 1f
+                    val boxWidthDp = boxHeightDp * aspect
                     Image(
                         bitmap = img,
                         contentDescription = androidx.compose.ui.res.stringResource(ovh.gabrielhuav.pow.R.string.cd_main_character),
                         modifier = modifier
-                            .requiredSize(exactPersonDp)
+                            .requiredSize(boxWidthDp, boxHeightDp)
                             .graphicsLayer {
-                                scaleX = if (isFacingRight) visualCompensation
-                                else -visualCompensation
-                                scaleY = visualCompensation
+                                scaleX = if (isFacingRight) 1f else -1f
                             }
                     )
                 }
@@ -263,6 +280,41 @@ private fun PlayerSkin.assetPath(action: PlayerAction, frame: Int): String = whe
     PlayerAction.WALK    -> walkPath(frame)
     PlayerAction.RUN     -> runPath(frame)
     PlayerAction.SPECIAL -> specialPath(frame)
+}
+
+/**
+ * Fracción vertical [0..1] que ocupa el contenido OPACO del bitmap dentro de su lienzo
+ * (alto del personaje / alto del lienzo). Se usa para normalizar el tamaño en pantalla
+ * del jugador entre animaciones cuyos lienzos tienen distinto padding (p. ej. CORRER
+ * suele venir en un lienzo más alto, por eso al ajustarse al cuadro se veía más pequeño
+ * que CAMINAR). Muestrea filas/columnas (no escanea cada píxel) para ser barato; el
+ * resultado se cachea por asset, así que solo se calcula una vez por imagen.
+ */
+private fun opaqueVerticalFraction(bmp: android.graphics.Bitmap): Float {
+    val w = bmp.width
+    val h = bmp.height
+    if (w <= 0 || h <= 0) return 1f
+    val stepX = (w / 48).coerceAtLeast(1)
+    val stepY = (h / 200).coerceAtLeast(1)
+    var top = -1
+    var bottom = -1
+    var y = 0
+    while (y < h) {
+        var rowHasContent = false
+        var x = 0
+        while (x < w) {
+            // alpha > ~6% → píxel "visible"
+            if ((bmp.getPixel(x, y) ushr 24) > 16) { rowHasContent = true; break }
+            x += stepX
+        }
+        if (rowHasContent) {
+            if (top < 0) top = y
+            bottom = y
+        }
+        y += stepY
+    }
+    if (top < 0 || bottom < 0) return 1f
+    return ((bottom - top + 1).toFloat() / h).coerceIn(0.05f, 1f)
 }
 
 /** Parámetros de animación (frames totales, delay en ms) según acción y skin. */

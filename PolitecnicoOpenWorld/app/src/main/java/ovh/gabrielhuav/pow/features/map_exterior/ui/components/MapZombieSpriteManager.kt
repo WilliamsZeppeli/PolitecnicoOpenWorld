@@ -5,11 +5,11 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import android.util.LruCache
-import ovh.gabrielhuav.pow.domain.models.Npc
+import ovh.gabrielhuav.pow.domain.models.map.Npc
 
 /**
  * Gestor de sprites de zombis para el mapa global (open world).
- * Carga los assets de ZOMBIES_MOD/z_walk y los cachea para el renderizado de NPCs.
+ * Carga los assets de SPRITES/ZOMBIE y los cachea para el renderizado de NPCs.
  */
 object MapZombieSpriteManager {
     private const val WALK_FRAME_COUNT = 9
@@ -38,7 +38,7 @@ object MapZombieSpriteManager {
             0 // Frame estático cuando no se mueve
         }
 
-        val assetPath = "ZOMBIES_MOD/z_walk/z_walk_${frameIndex + 1}.webp"
+        val assetPath = "SPRITES/ZOMBIE/z_walk_${frameIndex + 1}.webp"
         val roundedScale = Math.round(scale * 20f) / 20f
         // El ROL entra en la clave: cada rol es un palette swap (tinte) distinto del MISMO asset,
         // así no gastamos RAM en sprites nuevos y cada tinte se cachea por separado.
@@ -84,7 +84,7 @@ object MapZombieSpriteManager {
     }
 
     // Matriz de color (multiplica R,G,B) por rol. null = sin tinte (NORMAL).
-    private fun colorMatrixFor(role: ovh.gabrielhuav.pow.domain.models.ZombieRole): android.graphics.ColorMatrix? {
+    private fun colorMatrixFor(role: ovh.gabrielhuav.pow.domain.models.map.ZombieRole): android.graphics.ColorMatrix? {
         fun scaleMatrix(r: Float, g: Float, b: Float) = android.graphics.ColorMatrix(floatArrayOf(
             r, 0f, 0f, 0f, 0f,
             0f, g, 0f, 0f, 0f,
@@ -92,9 +92,9 @@ object MapZombieSpriteManager {
             0f, 0f, 0f, 1f, 0f
         ))
         return when (role) {
-            ovh.gabrielhuav.pow.domain.models.ZombieRole.RUNNER -> scaleMatrix(1.5f, 0.55f, 0.55f) // rojizo
-            ovh.gabrielhuav.pow.domain.models.ZombieRole.TANK   -> scaleMatrix(0.45f, 0.85f, 0.45f) // verdoso oscuro
-            ovh.gabrielhuav.pow.domain.models.ZombieRole.SCOUT  -> scaleMatrix(1.4f, 1.25f, 0.35f) // amarillento
+            ovh.gabrielhuav.pow.domain.models.map.ZombieRole.RUNNER -> scaleMatrix(1.5f, 0.55f, 0.55f) // rojizo
+            ovh.gabrielhuav.pow.domain.models.map.ZombieRole.TANK   -> scaleMatrix(0.45f, 0.85f, 0.45f) // verdoso oscuro
+            ovh.gabrielhuav.pow.domain.models.map.ZombieRole.SCOUT  -> scaleMatrix(1.4f, 1.25f, 0.35f) // amarillento
             else -> null
         }
     }
