@@ -1231,10 +1231,11 @@ internal fun NativeOsmMap(
             // logo caiga sobre un edificio inaccesible por calles (Overpass). Mismo culling por
             // viewport que el icono; se inserta al FONDO (overlays.add(0,…)) para quedar BAJO el
             // icono del metro. Radio = METRO_INTERACT_RADIUS_METERS (sync con la proximidad del VM).
+            // NOTA: usa tag +620 (no +600) para no colisionar con el FogOverlay (tag +600).
             @Suppress("UNCHECKED_CAST")
-            val metroZoneCache = (view.getTag(ovh.gabrielhuav.pow.R.id.route_overlay_tag.let { it + 600 }) as? MutableMap<String, org.osmdroid.views.overlay.Polygon>)
+            val metroZoneCache = (view.getTag(ovh.gabrielhuav.pow.R.id.route_overlay_tag.let { it + 620 }) as? MutableMap<String, org.osmdroid.views.overlay.Polygon>)
                 ?: mutableMapOf<String, org.osmdroid.views.overlay.Polygon>().also {
-                    view.setTag(ovh.gabrielhuav.pow.R.id.route_overlay_tag.let { it + 600 }, it)
+                    view.setTag(ovh.gabrielhuav.pow.R.id.route_overlay_tag.let { it + 620 }, it)
                 }
 
             if (uiState.zoomLevel >= 14.0) {
@@ -1263,11 +1264,14 @@ internal fun NativeOsmMap(
                 metroZoneCache.values.forEach { it.isEnabled = false }
             }
 
+
+
             // ─── METROBÚS STATIONS OVERLAY ────────────────────────────────────────────────
+            // NOTA: usa tag +550 (no +500) para no colisionar con el cache de la red de caminos (tag +500).
             @Suppress("UNCHECKED_CAST")
-            val metrobusMarkerCache = (view.getTag(ovh.gabrielhuav.pow.R.id.route_overlay_tag.let { it + 500 }) as? MutableMap<String, Marker>)
+            val metrobusMarkerCache = (view.getTag(ovh.gabrielhuav.pow.R.id.route_overlay_tag.let { it + 550 }) as? MutableMap<String, Marker>)
                 ?: mutableMapOf<String, Marker>().also {
-                    view.setTag(ovh.gabrielhuav.pow.R.id.route_overlay_tag.let { it + 500 }, it)
+                    view.setTag(ovh.gabrielhuav.pow.R.id.route_overlay_tag.let { it + 550 }, it)
                 }
 
             if (uiState.zoomLevel >= 14.0) {
