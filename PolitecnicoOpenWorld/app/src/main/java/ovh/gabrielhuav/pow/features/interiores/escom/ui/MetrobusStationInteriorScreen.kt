@@ -121,14 +121,15 @@ fun MetrobusStationInteriorScreen(
             val worldW = bgImg?.width?.toFloat() ?: 1920f
             val worldH = bgImg?.height?.toFloat() ?: 1080f
 
-            // El bus llega desde la IZQUIERDA (animación horizontal, diferente al metro vertical)
-            val bus1XOffset = remember { Animatable(-worldW) }
-            val bus2XOffset = remember { Animatable(worldW) }
+            // Bus 1 (izquierda): entra desde abajo, sale hacia arriba
+            val bus1YOffset = remember { Animatable(worldH) }
+            // Bus 2 (derecha): entra desde arriba, sale hacia abajo
+            val bus2YOffset = remember { Animatable(-worldH) }
 
             LaunchedEffect(state.isVehicle1Animating, state.spawnWithAnimation) {
                 if (state.isVehicle1Animating || state.spawnWithAnimation) {
-                    bus1XOffset.snapTo(-worldW)
-                    bus1XOffset.animateTo(
+                    bus1YOffset.snapTo(worldH)
+                    bus1YOffset.animateTo(
                         targetValue = 0f,
                         animationSpec = tween(durationMillis = 1800, easing = EaseOutQuart)
                     )
@@ -138,9 +139,9 @@ fun MetrobusStationInteriorScreen(
 
             LaunchedEffect(state.isVehicle1Departing) {
                 if (state.isVehicle1Departing) {
-                    bus1XOffset.snapTo(0f)
-                    bus1XOffset.animateTo(
-                        targetValue = worldW,
+                    bus1YOffset.snapTo(0f)
+                    bus1YOffset.animateTo(
+                        targetValue = -worldH,
                         animationSpec = tween(durationMillis = 2000, easing = EaseInQuart)
                     )
                 }
@@ -150,14 +151,14 @@ fun MetrobusStationInteriorScreen(
             LaunchedEffect(Unit) {
                 while (true) {
                     isBus2Visible = true
-                    bus2XOffset.snapTo(worldW)
-                    bus2XOffset.animateTo(
+                    bus2YOffset.snapTo(-worldH)
+                    bus2YOffset.animateTo(
                         targetValue = 0f,
                         animationSpec = tween(durationMillis = 1800, easing = EaseOutQuart)
                     )
                     delay(5000)
-                    bus2XOffset.animateTo(
-                        targetValue = -worldW,
+                    bus2YOffset.animateTo(
+                        targetValue = worldH,
                         animationSpec = tween(durationMillis = 1800, easing = EaseInQuart)
                     )
                     isBus2Visible = false
@@ -181,12 +182,12 @@ fun MetrobusStationInteriorScreen(
                         scale(cam.scale, cam.scale, pivot = Offset.Zero) {
                             drawImage(bgImg, dstOffset = IntOffset.Zero, dstSize = IntSize(worldW.toInt(), worldH.toInt()))
 
-                            // Bus 2 (fondo - llega desde derecha)
+                            // Bus 2 (fondo - entra desde arriba, baja hacia abajo)
                             if (isBus2Visible) {
                                 bus2Bitmap?.let { b2 ->
                                     drawImage(
                                         image = b2,
-                                        dstOffset = IntOffset(bus2XOffset.value.toInt(), 0),
+                                        dstOffset = IntOffset(0, bus2YOffset.value.toInt()),
                                         dstSize = IntSize(worldW.toInt(), worldH.toInt())
                                     )
                                 }
@@ -236,7 +237,7 @@ fun MetrobusStationInteriorScreen(
                 }
             }
 
-            // Bus 1 (frente – llega desde izquierda, pasa delante del jugador)
+            // Bus 1 (frente – entra desde abajo, sube hacia arriba, pasa delante del jugador)
             val isBus1Visible = state.isVehicle1Animating || state.spawnWithAnimation ||
                     state.showTransitMap || state.isVehicle1Departing ||
                     state.isBoardingWalkActive || state.isDisembarkingWalkActive
@@ -247,7 +248,7 @@ fun MetrobusStationInteriorScreen(
                             bus1Bitmap?.let { b1 ->
                                 drawImage(
                                     image = b1,
-                                    dstOffset = IntOffset(bus1XOffset.value.toInt(), 0),
+                                    dstOffset = IntOffset(0, bus1YOffset.value.toInt()),
                                     dstSize = IntSize(worldW.toInt(), worldH.toInt())
                                 )
                             }
