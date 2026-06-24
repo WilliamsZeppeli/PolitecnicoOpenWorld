@@ -126,8 +126,32 @@ fun MetrobusStationInteriorScreen(
             // Bus 2 (derecha): entra desde arriba, sale hacia abajo
             val bus2YOffset = remember { Animatable(-worldH) }
 
+            // Loop continuo del bus 1: sube de abajo a arriba cada cierto tiempo.
+            // Los LaunchedEffects de tránsito (boarding/departing) cancelan esta
+            // animación y toman el control cuando el jugador interactúa con el bus.
+            var isBus1Visible by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) {
+                while (true) {
+                    isBus1Visible = true
+                    bus1YOffset.snapTo(worldH)
+                    bus1YOffset.animateTo(
+                        targetValue = 0f,
+                        animationSpec = tween(durationMillis = 1800, easing = EaseOutQuart)
+                    )
+                    delay(5000)
+                    bus1YOffset.animateTo(
+                        targetValue = -worldH,
+                        animationSpec = tween(durationMillis = 1800, easing = EaseInQuart)
+                    )
+                    isBus1Visible = false
+                    delay(6000)
+                }
+            }
+
+            // Eventos de tránsito: sobreescriben el loop cuando el jugador aborda/parte.
             LaunchedEffect(state.isVehicle1Animating, state.spawnWithAnimation) {
                 if (state.isVehicle1Animating || state.spawnWithAnimation) {
+                    isBus1Visible = true
                     bus1YOffset.snapTo(worldH)
                     bus1YOffset.animateTo(
                         targetValue = 0f,
@@ -139,6 +163,7 @@ fun MetrobusStationInteriorScreen(
 
             LaunchedEffect(state.isVehicle1Departing) {
                 if (state.isVehicle1Departing) {
+                    isBus1Visible = true
                     bus1YOffset.snapTo(0f)
                     bus1YOffset.animateTo(
                         targetValue = -worldH,
@@ -219,8 +244,9 @@ fun MetrobusStationInteriorScreen(
                 modifier = Modifier.matchParentSize()
             )
 
-            // Jugador
-            val playerSizePx = 300f * cam.scale
+            // Jugador — base reducida (120 vs 300) para compensar el scale mayor
+            // del cam del Metrobús (assets portrait en pantalla landscape).
+            val playerSizePx = 120f * cam.scale
             val playerPxX = toScreenX(state.playerX)
             val playerPxY = toScreenY(state.playerY)
 
@@ -238,10 +264,10 @@ fun MetrobusStationInteriorScreen(
             }
 
             // Bus 1 (frente – entra desde abajo, sube hacia arriba, pasa delante del jugador)
-            val isBus1Visible = state.isVehicle1Animating || state.spawnWithAnimation ||
+            val showBus1 = isBus1Visible || state.isVehicle1Animating || state.spawnWithAnimation ||
                     state.showTransitMap || state.isVehicle1Departing ||
                     state.isBoardingWalkActive || state.isDisembarkingWalkActive
-            if (isBus1Visible && bus1Bitmap != null) {
+            if (showBus1 && bus1Bitmap != null) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     translate(cam.offsetX, cam.offsetY) {
                         scale(cam.scale, cam.scale, pivot = Offset.Zero) {
