@@ -526,7 +526,10 @@ private fun computeMetrobusCam(
     viewW: Float, viewH: Float, zoom: Float
 ): CameraTransform {
     if (viewW <= 0f || viewH <= 0f) return CameraTransform(0f, 0f, 1f)
-    val scale = (viewH / worldH) * zoom
+    // Escala para que el mundo LLENE la pantalla en la dimensión más restrictiva,
+    // igual que hace el Metro. En landscape con assets portrait esto aprovecha
+    // toda la altura disponible; en portrait (diseñador) aprovecha el ancho.
+    val scale = maxOf(viewW / worldW, viewH / worldH) * zoom
     val scaledW = worldW * scale
     val scaledH = worldH * scale
     var offsetX = viewW / 2f - playerX * scale

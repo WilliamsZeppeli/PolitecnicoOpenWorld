@@ -157,13 +157,7 @@ fun AppNavGraph(
                             val isMenu = route != null && !fromGame && portraitRoutes.any {
                                 route == it || route.startsWith("$it/") || route.startsWith("$it?")
                             }
-                            // EXCEPCIÓN: el interior de Metrobús se DIBUJÓ en VERTICAL (assets portrait:
-                            // inside/bus1/bus2 = 1168×1347, mapa 2551×3402). En horizontal se recortaba a
-                            // una franja ("todo vertical"). Esa ruta corre en PORTRAIT para que el arte
-                            // encaje. (El metro sí es horizontal: sus vehículos son 2816×1536.)
-                            val isMetrobusStation = route?.startsWith("metrobus_station_interior") == true
                             activity.requestedOrientation = when {
-                                isMetrobusStation -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
                                 isMenu -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                                 else -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                             }
